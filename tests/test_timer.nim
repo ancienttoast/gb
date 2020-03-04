@@ -1,6 +1,6 @@
 import
   unittest,
-  mem, timer
+  gb/[mem, timer]
 
 
 

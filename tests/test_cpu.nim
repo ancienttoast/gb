@@ -1,10 +1,10 @@
 import
   unittest,
-  mem, cpu
+  gb/[mem, cpu]
 
 
 
-template state(cpu: SM83, body: untyped): CpuState =
+template modState(cpu: SM83, body: untyped): CpuState =
   var
     s {.inject.} = cpu.state
   body
@@ -17,10 +17,10 @@ suite "LR35902 - Misc/control instructions":
     var
       mem = newSeq[uint8](8)
       mcu = newMcu(addr mem)
-      cpu = initCpu()
+      cpu = newCpu(mcu)
     mem[0] = 0x00'u8
     let
-      st = cpu.state:
+      st = cpu.modState:
         s.pc += 1
       oldM = mem
     cpu.step(mcu)
@@ -29,8 +29,23 @@ suite "LR35902 - Misc/control instructions":
 
 
 suite "LR35902 - Jumps/calls":
-  # TODO
-  discard
+  test "RET":
+    var
+      mem = newSeq[uint8](8)
+      mcu = newMcu(addr mem)
+      cpu = newCpu(mcu)
+    cpu.state.sp = 6
+    mem[0] = 0xc9'u8
+    mem[7] = 0'u8
+    mem[6] = 5'u8
+    let
+      oldS = cpu.modState:
+        s.pc = 5
+        s.sp = 8
+      oldM = mem
+    cpu.step(mcu)
+    check cpu.state == oldS
+    check mem == oldM
 
 
 suite "LR35902 - 8bit load/store/move instructions":
@@ -38,11 +53,11 @@ suite "LR35902 - 8bit load/store/move instructions":
     var
       mem = newSeq[uint8](8)
       mcu = newMcu(addr mem)
-      cpu = initCpu()
+      cpu = newCpu(mcu)
     mem[0] = 0x06'u8
     mem[1] = 5'u8
     let
-      oldS = cpu.state:
+      oldS = cpu.modState:
         s.pc += 2
         s[rB] = 5
       oldM = mem
@@ -56,11 +71,11 @@ suite "LR35902 - 8bit arithmetic/logical instructions":
     var
       mem = newSeq[uint8](8)
       mcu = newMcu(addr mem)
-      cpu = initCpu()
+      cpu = newCpu(mcu)
     mem[0] = 0x05'u8
-    cpu[rB] = 10
+    cpu.state[rB] = 10
     let
-      oldS = cpu.state:
+      oldS = cpu.modState:
         s.pc += 1
         s.flags = { fAddSub }
         s[rB] = 9
@@ -73,14 +88,86 @@ suite "LR35902 - 8bit arithmetic/logical instructions":
     var
       mem = newSeq[uint8](8)
       mcu = newMcu(addr mem)
-      cpu = initCpu()
+      cpu = newCpu(mcu)
     mem[0] = 0x05'u8
-    cpu[rB] = 0
+    cpu.state[rB] = 0
     let
-      oldS = cpu.state:
+      oldS = cpu.modState:
         s.pc += 1
         s.flags = { fAddSub }
         s[rB] = 255
+      oldM = mem
+    cpu.step(mcu)
+    check cpu.state == oldS
+    check mem == oldM
+  
+  test "OR r8 - non 0":
+    var
+      mem = newSeq[uint8](8)
+      mcu = newMcu(addr mem)
+      cpu = newCpu(mcu)
+    mem[0] = 0xb2'u8
+    cpu.state[rA] = 0b00001111
+    cpu.state[rD] = 0b10101010
+    let
+      oldS = cpu.modState:
+        s.pc += 1
+        s.flags = { }
+        s[rA] = 0b10101111
+      oldM = mem
+    cpu.step(mcu)
+    check cpu.state == oldS
+    check mem == oldM
+  
+  test "OR r8 - 0":
+    var
+      mem = newSeq[uint8](8)
+      mcu = newMcu(addr mem)
+      cpu = newCpu(mcu)
+    mem[0] = 0xb2'u8
+    cpu.state[rA] = 0b00000000
+    cpu.state[rD] = 0b00000000
+    let
+      oldS = cpu.modState:
+        s.pc += 1
+        s.flags = { fZero }
+        s[rA] = 0b00000000
+      oldM = mem
+    cpu.step(mcu)
+    check cpu.state == oldS
+    check mem == oldM
+  
+  test "OR (HL)":
+    var
+      mem = newSeq[uint8](8)
+      mcu = newMcu(addr mem)
+      cpu = newCpu(mcu)
+    mem[0] = 0xb6'u8
+    mem[1] = 0b10101010'u8
+    cpu.state[rA] = 0b00001111
+    cpu.state[rHL] = 1
+    let
+      oldS = cpu.modState:
+        s.pc += 1
+        s.flags = { }
+        s[rA] = 0b10101111
+      oldM = mem
+    cpu.step(mcu)
+    check cpu.state == oldS
+    check mem == oldM
+  
+  test "OR A":
+    var
+      mem = newSeq[uint8](8)
+      mcu = newMcu(addr mem)
+      cpu = newCpu(mcu)
+    mem[0] = 0xb7'u8
+    cpu.state[rA] = 0b00001111
+    let
+      oldS = cpu.modState:
+        s.pc += 1
+        s.flags = { }
+        s[rA] = 0b00001111
       oldM = mem
     cpu.step(mcu)
     check cpu.state == oldS
@@ -92,13 +179,13 @@ suite "LR35902 - 8bit rotations/shifts and bit instructions":
     var
       mem = newSeq[uint8](8)
       mcu = newMcu(addr mem)
-      cpu = initCpu()
+      cpu = newCpu(mcu)
     mem[0] = 0xcb'u8
     mem[1] = 0x11'u8
-    cpu[rC] = 0b00000000
-    cpu.flags = {}
+    cpu.state[rC] = 0b00000000
+    cpu.state.flags = {}
     let
-      oldS = cpu.state:
+      oldS = cpu.modState:
         s.pc += 2
         s.flags = { fZero }
       oldM = mem
@@ -110,13 +197,13 @@ suite "LR35902 - 8bit rotations/shifts and bit instructions":
     var
       mem = newSeq[uint8](8)
       mcu = newMcu(addr mem)
-      cpu = initCpu()
+      cpu = newCpu(mcu)
     mem[0] = 0xcb'u8
     mem[1] = 0x11'u8
-    cpu[rC] = 0b10000000
-    cpu.flags = {}
+    cpu.state[rC] = 0b10000000
+    cpu.state.flags = {}
     let
-      oldS = cpu.state:
+      oldS = cpu.modState:
         s.pc += 2
         s.flags = { fZero, fCarry }
         s[rC] = 0b00000000
@@ -129,13 +216,13 @@ suite "LR35902 - 8bit rotations/shifts and bit instructions":
     var
       mem = newSeq[uint8](8)
       mcu = newMcu(addr mem)
-      cpu = initCpu()
+      cpu = newCpu(mcu)
     mem[0] = 0xcb'u8
     mem[1] = 0x11'u8
-    cpu[rC] = 0b00000100
-    cpu.flags = { fCarry }
+    cpu.state[rC] = 0b00000100
+    cpu.state.flags = { fCarry }
     let
-      oldS = cpu.state:
+      oldS = cpu.modState:
         s.pc += 2
         s.flags = {}
         s[rC] = 0b00001001
@@ -148,23 +235,25 @@ suite "LR35902 - 8bit rotations/shifts and bit instructions":
 suite "Stuff":
   test "set 16bit register":
     var
-      cpu = initCpu()
-    cpu[rBC] = 0x1234
+      mem = newSeq[uint8](8)
+      mcu = newMcu(addr mem)
+      cpu = newCpu(mcu)
+    cpu.state[rBC] = 0x1234
 
-    check cpu[rB] == 0x12
-    check cpu[rC] == 0x34
+    check cpu.state[rB] == 0x12
+    check cpu.state[rC] == 0x34
 
   test "PUSH POP":
     var
       mem = newSeq[uint8](8)
       mcu = newMcu(addr mem)
-      cpu = initCpu()
+      cpu = newCpu(mcu)
     mem[0] = 0xc5'u8
     mem[1] = 0xe1'u8
-    cpu[rBC] = 0x1234
-    cpu.sp = 7
+    cpu.state[rBC] = 0x1234
+    cpu.state.sp = 7
     let
-      oldS = cpu.state:
+      oldS = cpu.modState:
         s.pc += 2
         s[rHL] = 0x1234
     var
