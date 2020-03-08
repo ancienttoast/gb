@@ -59,6 +59,7 @@ const
   OamStartAddress = 0xfe00
 
   MapAddress = [ 0x9800, 0x9C00 ]
+  TileAddress = [ 0x8800, 0x8000 ]
 
 type
   DisplayGrayShades = enum
@@ -76,10 +77,10 @@ type
   DisplayIOState* {.bycopy.} = tuple
     lcdc:     uint8   ## 0xff40  The main LCD control register.
                       ##   bit 7 - LCD display enable flag
-                      ##   bit 6 - Window background map selection. If 0 0x9800 tilemap is used, otherwise  0x9C00.
+                      ##   bit 6 - Window background map selection. (0=0x9800-0x9bff, 1=0x9c00-0x9fff)
                       ##   bit 5 - Window enable flag
-                      ##   bit 4 - BG and Window tile addressing mode
-                      ##   bit 3 - BG map selection, similar to _bit 6_. If 0 0x9800, otherwise 0x9C00.
+                      ##   bit 4 - BG and Window tile addressing mode. (0=0x8800-0x97ff, 1=0x8000-0x8fff)
+                      ##   bit 3 - BG map selection, similar to _bit 6_. (0=0x9800-0x9bff, 1=0x9c00-0x9fff)
                       ##   bit 2 - OBJ size. 0: 8x8, 1: 8x16
                       ##   bit 1 - OBJ display enable flag
                       ##   bit 0 - BG/Window display/Priority
@@ -123,8 +124,15 @@ type
 
   DisplaySpriteAttribute {.bycopy.} = tuple
     y, x:  uint8      ## Specifies the sprite position (x - 8, y - 16)
-    tile:  uint8
-    flags: uint8
+    tile:  uint8      ## Specifies the tile number (0x00..0xff) from the memory at 0x8000-0x8fff
+    flags: uint8      ## Attributes
+                      ##   bit 7   - OBJ-to-BG Priority (0=OBJ Above BG, 1=OBJ Behind BG color 1-3)
+                      ##             (Used for both BG and Window. BG color 0 is always behind OBJ)
+                      ##   bit 6   - Y flip (0=Normal, 1=Vertically mirrored)
+                      ##   bit 5   - X flip (0=Normal, 1=Horizontally mirrored)
+                      ##   bit 4   - Palette number (0=OBP0, 1=OBP1) [DMG Only]
+                      ##   bit 3   - Tile VRAM-Bank (0=Bank 0, 1=Bank 1) [CGB Only]
+                      ##   bit 2-0 - Palette number (OBP0-7) [CGB Only]
   
   DisplayVram = array[8192, uint8]
   
@@ -147,6 +155,9 @@ func isEnabled(self: DisplayIOState): bool =
 func bgMapAddress(self: DisplayIOState): MemAddress =
   MapAddress[self.lcdc.testBit(3).int].MemAddress
 
+func bgTileAddress(self: DisplayIOState): MemAddress =
+  TileAddress[self.lcdc.testBit(4).int].MemAddress
+
 func spriteSize(self: DisplayIOState): bool =
   self.lcdc.testBit(2)
 
@@ -154,7 +165,14 @@ func bgColorShade(self: DisplayIOState, colorNumber: range[0..3]): DisplayGraySh
   (self.bgp shl (6 - colorNumber*2) shr 6).DisplayGrayShades
 
 
-func step*(self: Display): bool {.discardable.} =
+func isXFlipped(sprite: DisplaySpriteAttribute): bool =
+  testBit(sprite.flags, 5)
+
+func isYFlipped(sprite: DisplaySpriteAttribute): bool =
+  testBit(sprite.flags, 6)
+
+
+proc step*(self: Display): bool {.discardable.} =
   self.state.timer += 1
   if self.state.timer > 456:
     self.state.io.ly += 1
@@ -167,7 +185,20 @@ func step*(self: Display): bool {.discardable.} =
     self.mcu.write(0xff0f, self.mcu.read(0xff0f) or 0b00000001)
 
 proc pushHandler*(mcu: Mcu, self: Display) =
+  let
+    dmaHandler = MemHandler(
+      read: proc(address: MemAddress): uint8 = 0,
+      write: proc(address: MemAddress, value: uint8) =
+        # TODO: this should 160 cycles
+        let
+          source = value.uint16 shl 8
+        for i in 0.uint16 ..< DisplayOam.sizeof.uint16:
+          mcu[(OamStartAddress.uint16 + i).MemAddress] = mcu[(source + i).MemAddress]
+      ,
+      area: 0xff46.MemAddress..0xff46.MemAddress
+    )
   mcu.pushHandler(0xff40.MemAddress, addr self.state.io)
+  mcu.pushHandler(dmaHandler)
   mcu.pushHandler(VramStartAddress, addr self.state.vram)
   mcu.pushHandler(OamStartAddress, addr self.state.oam)
 
@@ -187,14 +218,12 @@ const
     [8'u8, 24, 32].ColorRGBU,
   ]
 
-proc tile(self: Display, tileNum: int): Image[ColorRGBU] =
+proc tile(self: Display, tileAddress: int, gbPalette: uint8): Image[ColorRGBU] =
   result = initImage[ColorRGBU](8, 8)
-  let
-    tilePos = 0x8000 + tileNum*16
   for i in 0..7:
     let
-      b0 = self.mcu[(tilePos + i*2).MemAddress]
-      b1 = self.mcu[(tilePos + i*2).MemAddress + 1]
+      b0 = self.mcu[(tileAddress + i*2).MemAddress]
+      b1 = self.mcu[(tileAddress + i*2).MemAddress + 1]
     for j in 0..7:
       var
         c = 0
@@ -204,12 +233,17 @@ proc tile(self: Display, tileNum: int): Image[ColorRGBU] =
         c.setBit(1)
       result[7 - j, i] = Colors[self.state.io.bgColorShade(c)]
 
+proc bgTile*(self: Display, tileNum: int): Image[ColorRGBU] =
+  let
+    tilePos = self.state.io.bgTileAddress().int + tileNum*16
+  self.tile(tilePos, self.state.io.bgp)
+
 proc renderTiles*(self: Display, b: range[0..2]): Image[ColorRGBU] =
   result = initImage[ColorRGBU](8*16, 8*8)
   for y in 0..7:
     for x in 0..15:
       let
-        tileImage = self.tile(b*128 + (x + y*16))
+        tileImage = self.bgTile(b*128 + (x + y*16))
       result.blit(tileImage, x*8, y*8)
 
 proc renderBackground*(self: Display): Image[ColorRGBU] =
@@ -221,7 +255,7 @@ proc renderBackground*(self: Display): Image[ColorRGBU] =
       let
         tilePos = (mapAddress.int + y*32 + x).MemAddress
         tileNum = self.mcu[tilePos].int
-        tileImage = self.tile(tileNum)
+        tileImage = self.bgTile(tileNum)
       result.blit(tileImage, x*8, y*8)
   let
     min0 = [ self.state.io.scx.int, self.state.io.scy.int ]
@@ -235,7 +269,13 @@ proc renderSprites*(self: Display): Image[ColorRGBU] =
     if sprite.x == 0 or sprite.x >= 160'u8 or sprite.y == 0 or sprite.y >= 168'u8:
       continue
     let
-      x = sprite.x - 8
-      y = sprite.y - 16
-      tileImage = self.tile(sprite.tile.int)
-    result.blit(tileImage, x.int, y.int)
+      x = sprite.x.int - 8
+      y = sprite.y.int - 16
+    var
+      tileImage = self.bgTile(sprite.tile.int)
+    if x < 0 or y < 0:
+      # TODO: handle this case
+      continue
+    if sprite.isXFlipped: tileImage = tileImage.flippedHoriz()
+    if sprite.isYFlipped: tileImage = tileImage.flippedVert()
+    result.blit(tileImage, x, y)
