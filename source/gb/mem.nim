@@ -40,11 +40,11 @@ type
 proc clearHandlers*(self: Mcu) =
   self.handlers = newSeq[MemHandler]()
 
-proc pushHandler*(self: Mcu, handler: MemHandler) =
-  self.handlers &= handler
-
 proc popHandler*(self: Mcu) =
   discard self.handlers.pop()
+
+proc pushHandler*(self: Mcu, handler: MemHandler) =
+  self.handlers &= handler
 
 proc pushHandler*(self: Mcu, area: MemArea, constant: uint8) =
   self.pushHandler(

@@ -38,6 +38,47 @@ template `or`(a, b: ImGuiWindowFlags): ImGuiWindowFlags =
   (a.int or b.int).ImGuiWindowFlags
 
 
+proc cpuWindow(state: CpuState) =
+  igSetNextWindowPos(ImVec2(x: 4, y: 185), FirstUseEver)
+  igSetNextWindowSize(ImVec2(x: 151, y: 196), FirstUseEver)
+  igBegin("CPU")
+  if not igIsWindowCollapsed():
+    for r in Register16:
+      igTextDisabled($r)
+      igSameLine()
+      igText(&"{state[r]:#06x}")
+
+      if r == rAF:
+        igSameLine()
+        igText(&"{state.flags}")
+
+    igSeparator()
+    
+    igTextDisabled("SP")
+    igSameLine()
+    igText(&"{state.sp:#06x}")
+
+    igTextDisabled("PC")
+    igSameLine()
+    igText(&"{state.pc:#06x}")
+
+    igSeparator()
+
+    igTextDisabled("ie")
+    igSameLine()
+    igText(&"{state.ie}")
+
+    igTextDisabled("if")
+    igSameLine()
+    igText(&"{state.`if`}")
+
+    igSeparator()
+
+    igTextDisabled("status")
+    igSameLine()
+    igText(&"{state.status}")
+  igEnd()
+
 proc main() =
   assert glfwInit()
 
@@ -74,8 +115,11 @@ proc main() =
     showDemo = false
     bgTexture = initTexture()
     spriteTexture = initTexture()
+    oamTextures = newSeq[Texture](40)
     gbRunning = true
     prevState = gameboy.cpu.state
+  for texture in oamTextures.mitems:
+    texture = initTexture()
   while not window.windowShouldClose:
     glfwPollEvents()
 
@@ -111,6 +155,7 @@ proc main() =
       igEndMainMenuBar()
 
     if showBgMap:
+      igSetNextWindowPos(ImVec2(x: 159, y: 24), FirstUseEver)
       igSetNextWindowSize(ImVec2(x: 530, y: 550), FirstUseEver)
       igBegin("BG map", flags = ImGuiWindowFlags.NoResize or ImGuiWindowFlags.NoCollapse)
       if not igIsWindowCollapsed():
@@ -121,6 +166,7 @@ proc main() =
       igEnd()
     
     if showSpriteMap:
+      igSetNextWindowPos(ImVec2(x: 693, y: 418), FirstUseEver)
       igSetNextWindowSize(ImVec2(x: 337, y: 325), FirstUseEver)
       igBegin("Sprite map", flags = ImGuiWindowFlags.NoResize or ImGuiWindowFlags.NoCollapse)
       if not igIsWindowCollapsed():
@@ -131,47 +177,41 @@ proc main() =
       igEnd()
     
     if showCpu:
-      igBegin("CPU")
-      if not igIsWindowCollapsed():
-        let
-          state = gameboy.cpu.state
-        for r in Register16:
-          igTextDisabled($r)
-          igSameLine()
-          igText(&"{state[r]:#06x}")
+      cpuWindow(gameboy.cpu.state)
+    
+    let
+      oams = gameboy.display.state.oam
+    igSetNextWindowPos(ImVec2(x: 693, y: 24), FirstUseEver)
+    igSetNextWindowSize(ImVec2(x: 521, y: 390), FirstUseEver)
+    igBegin("OAM")
+    igColumns(8, "oam", true)
+    var
+      col = 0
+    for i, oam in oams:
+      let
+        tile = gameboy.display.bgTile(oam.tile.int)
+      oamTextures[i].upload(tile)
+      igImage(cast[pointer](oamTextures[i].texture), ImVec2(x: oamTextures[i].width.float32 * 2, y: oamTextures[i].height.float32 * 2))
+      igSameLine()
+      igBeginGroup()
+      igText(&"{oam.y:#04x}")
+      igText(&"{oam.x:#04x}")
+      igText(&"{oam.tile:#04x}")
+      igText(&"{oam.flags:#04x}")
+      igEndGroup()
 
+      igNextColumn()
+
+      col += 1
+      if col >= 8 and i < 39:
+        col = 0
         igSeparator()
-        
-        igTextDisabled("SP")
-        igSameLine()
-        igText(&"{state.sp:#06x}")
 
-        igTextDisabled("PC")
-        igSameLine()
-        igText(&"{state.pc:#06x}")
-
-        igSeparator()
-
-        igTextDisabled("flags")
-        igSameLine()
-        igText(&"{state.flags}")
-
-        igSeparator()
-
-        igTextDisabled("ie")
-        igSameLine()
-        igText(&"{state.ie}")
-
-        igTextDisabled("if")
-        igSameLine()
-        igText(&"{state.`if`}")
-
-        igTextDisabled("waitForInterrupt")
-        igSameLine()
-        igText(&"{state.waitForInterrupt}")
-      igEnd()
+    igEnd()
 
     if showControls:
+      igSetNextWindowPos(ImVec2(x: 4, y: 24), FirstUseEver)
+      igSetNextWindowSize(ImVec2(x: 151, y: 156), FirstUseEver)
       igBegin("Controls")
 
       if igButton("Reset"):

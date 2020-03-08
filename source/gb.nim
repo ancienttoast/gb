@@ -35,7 +35,6 @@ proc load(self: Gameboy) =
     bootRomDisableHandler = MemHandler(
       read: proc(address: MemAddress): uint8 = 0,
       write: proc(address: MemAddress, value: uint8) =
-        debugEcho "DISABLE BOOT ROM"
         self.mcu.popHandler()
         self.mcu.popHandler()
       ,
