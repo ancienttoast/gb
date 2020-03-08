@@ -9,7 +9,6 @@
 
 ]##
 import
-  imageman,
   gb/[mem, cpu, timer, display, cartridge]
 
 
@@ -37,8 +36,10 @@ proc load(self: Gameboy) =
       read: proc(address: MemAddress): uint8 = 0,
       write: proc(address: MemAddress, value: uint8) =
         debugEcho "DISABLE BOOT ROM"
+        self.mcu.popHandler()
+        self.mcu.popHandler()
       ,
-      area: 0xff50.MemAddress ..< 0xff50.MemAddress
+      area: 0xff50.MemAddress .. 0xff50.MemAddress
     )
   assert self.bootRom.len == 256
 

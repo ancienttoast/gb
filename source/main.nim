@@ -66,33 +66,34 @@ proc main() =
 
   var
     gameboy = newGameboy()
+    isRunning = true
     showBgMap = true
     showSpriteMap = true
     showControls = true
-    showLog = true
+    showCpu = true
     showDemo = false
     bgTexture = initTexture()
     spriteTexture = initTexture()
-    log = newSeq[string]()
-    somefloat: float32 = 0.0f
-    counter: int32 = 0
     gbRunning = true
+    prevState = gameboy.cpu.state
   while not window.windowShouldClose:
     glfwPollEvents()
 
-    try:
-      var
-        needsRedraw = false
-      while not needsRedraw and gbRunning:
-        gameboy.cpu.step(gameboy.mcu)
-        gameboy.timer.step()
-        needsRedraw = gameboy.display.step()
-    except:
-      log &= getCurrentException().msg
-      log &= getStackTrace(getCurrentException())
-      #echo "cpu\t", gameboy.cpu.state
-      #echo "display\t", gameboy.display.state
-      gbRunning = false
+    if isRunning:
+      try:
+        var
+          needsRedraw = false
+        while not needsRedraw and gbRunning:
+          prevState = gameboy.cpu.state
+          gameboy.cpu.step(gameboy.mcu)
+          gameboy.timer.step()
+          needsRedraw = gameboy.display.step()
+      except:
+        echo getCurrentException().msg
+        echo getStackTrace(getCurrentException())
+        echo "cpu\t", gameboy.cpu.state
+        #echo "display\t", gameboy.display.state
+        gbRunning = false
 
     igOpenGL3NewFrame()
     igGlfwNewFrame()
@@ -103,68 +104,72 @@ proc main() =
         igCheckbox("Controls", addr showControls) 
         igCheckbox("BG Window", addr showBgMap)
         igCheckbox("Sprite Window", addr showSpriteMap)
+        igCheckbox("Cpu window", addr showCpu)
         igSeparator()
         igCheckbox("Demo", addr showDemo)
         igEndMenu()
       igEndMainMenuBar()
 
     if showBgMap:
-      let
-        image = gameboy.display.renderBackground()
-      bgTexture.upload(image)
       igSetNextWindowSize(ImVec2(x: 530, y: 550), FirstUseEver)
       igBegin("BG map", flags = ImGuiWindowFlags.NoResize or ImGuiWindowFlags.NoCollapse)
-      igImage(cast[pointer](bgTexture.texture), ImVec2(x: bgTexture.width.float32 * 2, y: bgTexture.height.float32 * 2))
+      if not igIsWindowCollapsed():
+        let
+          image = gameboy.display.renderBackground()
+        bgTexture.upload(image)
+        igImage(cast[pointer](bgTexture.texture), ImVec2(x: bgTexture.width.float32 * 2, y: bgTexture.height.float32 * 2))
       igEnd()
     
     if showSpriteMap:
-      let
-        image = gameboy.display.renderSprites()
-      spriteTexture.upload(image)
       igSetNextWindowSize(ImVec2(x: 337, y: 325), FirstUseEver)
       igBegin("Sprite map", flags = ImGuiWindowFlags.NoResize or ImGuiWindowFlags.NoCollapse)
-      igImage(cast[pointer](spriteTexture.texture), ImVec2(x: spriteTexture.width.float32 * 2, y: spriteTexture.height.float32 * 2))
+      if not igIsWindowCollapsed():
+        let
+          image = gameboy.display.renderSprites()
+        spriteTexture.upload(image)
+        igImage(cast[pointer](spriteTexture.texture), ImVec2(x: spriteTexture.width.float32 * 2, y: spriteTexture.height.float32 * 2))
       igEnd()
     
-    let
-      state = gameboy.cpu.state
-    igBegin("CPU")
-    for r in Register16:
-      igTextDisabled($r)
-      igSameLine()
-      igText(&"{state[r]:#06x}")
+    if showCpu:
+      igBegin("CPU")
+      if not igIsWindowCollapsed():
+        let
+          state = gameboy.cpu.state
+        for r in Register16:
+          igTextDisabled($r)
+          igSameLine()
+          igText(&"{state[r]:#06x}")
 
-    igSeparator()
-    
-    igTextDisabled("SP")
-    igSameLine()
-    igText(&"{state.sp:#06x}")
+        igSeparator()
+        
+        igTextDisabled("SP")
+        igSameLine()
+        igText(&"{state.sp:#06x}")
 
-    igTextDisabled("PC")
-    igSameLine()
-    igText(&"{state.pc:#06x}")
+        igTextDisabled("PC")
+        igSameLine()
+        igText(&"{state.pc:#06x}")
 
-    igSeparator()
+        igSeparator()
 
-    igTextDisabled("flags")
-    igSameLine()
-    igText(&"{state.flags}")
+        igTextDisabled("flags")
+        igSameLine()
+        igText(&"{state.flags}")
 
-    igSeparator()
+        igSeparator()
 
-    igTextDisabled("ie")
-    igSameLine()
-    igText(&"{state.ie}")
+        igTextDisabled("ie")
+        igSameLine()
+        igText(&"{state.ie}")
 
-    igTextDisabled("if")
-    igSameLine()
-    igText(&"{state.`if`}")
+        igTextDisabled("if")
+        igSameLine()
+        igText(&"{state.`if`}")
 
-    igTextDisabled("waitForInterrupt")
-    igSameLine()
-    igText(&"{state.waitForInterrupt}")
-
-    igEnd()
+        igTextDisabled("waitForInterrupt")
+        igSameLine()
+        igText(&"{state.waitForInterrupt}")
+      igEnd()
 
     if showControls:
       igBegin("Controls")
@@ -172,27 +177,24 @@ proc main() =
       if igButton("Reset"):
         gameboy = newGameboy()
         gbRunning = true
+      
+      igSeparator()
 
-      igText("This is some useful text.")
-      igCheckbox("Demo Window", show_demo.addr)
+      if igButton("Play"):
+        isRunning = true
 
-      igSliderFloat("float", somefloat.addr, 0.0f, 1.0f)
+      if igButton("Pause"):
+        isRunning = false
 
-      if igButton("Button", ImVec2(x: 0, y: 0)):
-        counter.inc
-      igSameLine()
-      igText("counter = %d", counter)
+      if igButton("Step"):
+        isRunning = false
+        gameboy.cpu.step(gameboy.mcu)
+        gameboy.timer.step()
+        discard gameboy.display.step()
+      
+      igSeparator()
 
-      igText("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / igGetIO().framerate, igGetIO().framerate)
-      igEnd()
-    
-    if showLog:
-      igSetNextWindowSize(ImVec2(x: 530, y: 295), FirstUseEver)
-      igBegin("Log")
-      igListBoxHeader("", ImVec2(x: 512, y: 256))
-      for line in log:
-        igText(line)
-      igListBoxFooter()
+      igCheckbox("gbRunning", addr gbRunning)
       igEnd()
     
     if showDemo:

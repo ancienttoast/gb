@@ -3,7 +3,6 @@ import
   gb/[mem, cpu]
 
 
-
 template modState(cpu: SM83, body: untyped): CpuState =
   var
     s {.inject.} = cpu.state
@@ -60,6 +59,42 @@ suite "LR35902 - 8bit load/store/move instructions":
       oldS = cpu.modState:
         s.pc += 2
         s[rB] = 5
+      oldM = mem
+    cpu.step(mcu)
+    check cpu.state == oldS
+    check mem == oldM
+
+
+suite "LR35902 - 16bit arithmetic/logical instructions":
+  test "ADD HL,DE":
+    var
+      mem = newSeq[uint8](8)
+      mcu = newMcu(addr mem)
+      cpu = newCpu(mcu)
+    mem[0] = 0x19'u8
+    cpu.state[rHL] = 1
+    cpu.state[rDE] = 2
+    let
+      oldS = cpu.modState:
+        s.pc += 1
+        s[rHL] = 3
+      oldM = mem
+    cpu.step(mcu)
+    check cpu.state == oldS
+    check mem == oldM
+  
+  test "ADD HL,SP":
+    var
+      mem = newSeq[uint8](8)
+      mcu = newMcu(addr mem)
+      cpu = newCpu(mcu)
+    mem[0] = 0x39'u8
+    cpu.state[rHL] = 1
+    cpu.state.sp = 2
+    let
+      oldS = cpu.modState:
+        s.pc += 1
+        s[rHL] = 3
       oldM = mem
     cpu.step(mcu)
     check cpu.state == oldS
@@ -172,6 +207,23 @@ suite "LR35902 - 8bit arithmetic/logical instructions":
     cpu.step(mcu)
     check cpu.state == oldS
     check mem == oldM
+  
+  test "CPL":
+    var
+      mem = newSeq[uint8](8)
+      mcu = newMcu(addr mem)
+      cpu = newCpu(mcu)
+    mem[0] = 0x2f'u8
+    cpu.state[rA] = 0b10011001
+    let
+      oldS = cpu.modState:
+        s.pc += 1
+        s.flags = { fAddSub, fHalfCarry }
+        s[rA] = 0b01100110
+      oldM = mem
+    cpu.step(mcu)
+    check cpu.state == oldS
+    check mem == oldM
 
 
 suite "LR35902 - 8bit rotations/shifts and bit instructions":
@@ -226,6 +278,42 @@ suite "LR35902 - 8bit rotations/shifts and bit instructions":
         s.pc += 2
         s.flags = {}
         s[rC] = 0b00001001
+      oldM = mem
+    cpu.step(mcu)
+    check cpu.state == oldS
+    check mem == oldM
+  
+  test "SWAP C - not 0":
+    var
+      mem = newSeq[uint8](8)
+      mcu = newMcu(addr mem)
+      cpu = newCpu(mcu)
+    mem[0] = 0xcb'u8
+    mem[1] = 0x31'u8
+    cpu.state[rC] = 0b00010111
+    let
+      oldS = cpu.modState:
+        s.pc += 2
+        s.flags = {}
+        s[rC] = 0b01110001
+      oldM = mem
+    cpu.step(mcu)
+    check cpu.state == oldS
+    check mem == oldM
+  
+  test "SWAP C - 0":
+    var
+      mem = newSeq[uint8](8)
+      mcu = newMcu(addr mem)
+      cpu = newCpu(mcu)
+    mem[0] = 0xcb'u8
+    mem[1] = 0x31'u8
+    cpu.state[rC] = 0b00000000
+    let
+      oldS = cpu.modState:
+        s.pc += 2
+        s.flags = { fZero }
+        s[rC] = 0b00000000
       oldM = mem
     cpu.step(mcu)
     check cpu.state == oldS

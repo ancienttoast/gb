@@ -181,10 +181,10 @@ proc newDisplay*(mcu: Mcu): Display =
 
 const
   Colors: array[DisplayGrayShades, ColorRGBU] = [
-    [44'u8, 33, 55].ColorRGBU,
-    [118'u8, 68, 98].ColorRGBU,
-    [237'u8, 180, 161].ColorRGBU,
-    [169'u8, 104, 104].ColorRGBU
+    [224'u8, 248, 208].ColorRGBU,
+    [136'u8, 192, 112].ColorRGBU,
+    [52'u8, 104, 86].ColorRGBU,
+    [8'u8, 24, 32].ColorRGBU,
   ]
 
 proc tile(self: Display, tileNum: int): Image[ColorRGBU] =
@@ -223,8 +223,11 @@ proc renderBackground*(self: Display): Image[ColorRGBU] =
         tileNum = self.mcu[tilePos].int
         tileImage = self.tile(tileNum)
       result.blit(tileImage, x*8, y*8)
-  #result.drawLine(self.state.io.scx.int, self.state.io.scy.int, self.state.io.scx.int + 160, self.state.io.scy.int, [255'u8, 0, 0].ColorRGBU)
-  #result.drawLine(self.state.io.scx.int, self.state.io.scy.int, self.state.io.scx.int, self.state.io.scy.int + 144, [255'u8, 0, 0].ColorRGBU)
+  let
+    min0 = [ self.state.io.scx.int, self.state.io.scy.int ]
+    max0 = [ self.state.io.scx.int + 160, self.state.io.scy.int + 144 ]
+  result.drawLine(max(0, min0[0]), max(0, min0[1]), min(255, min0[0]), min(255, max0[1]), [255'u8, 0, 0].ColorRGBU)
+  result.drawLine(max(0, min0[0]), max(0, min0[1]), min(255, max0[0]), min(255, min0[1]), [255'u8, 0, 0].ColorRGBU)
 
 proc renderSprites*(self: Display): Image[ColorRGBU] =
   result = initImage[ColorRGBU](Width, Height)
