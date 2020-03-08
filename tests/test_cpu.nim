@@ -320,7 +320,7 @@ suite "LR35902 - 8bit rotations/shifts and bit instructions":
     check mem == oldM
 
 
-suite "Stuff":
+suite "LR35902 - combined":
   test "set 16bit register":
     var
       mem = newSeq[uint8](8)

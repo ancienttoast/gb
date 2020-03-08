@@ -66,6 +66,9 @@ type
 
   Register = Register8 | Register16
 
+  Sm83StatusFlag = enum
+    sfHalted
+
   Sm83State* = object
     r*:  array[Register8, uint8]
     sp*: uint16 ## Stack Pointer
@@ -73,7 +76,7 @@ type
     ime*: uint8
     ie*: set[Interrupt]    ## Interrupt enable (R/W)
     `if`*: set[Interrupt]  ## Interrupt flag (R/W)
-    waitForInterrupt*: bool
+    status*: set[Sm83StatusFlag]
 
   Sm83* = ref object
     state*: Sm83State
@@ -845,7 +848,7 @@ op opSTOP, 1:
   raise newException(Exception, "Not implemented opcode: " & opcode.int.toHex(2))
 
 op opHALT, 1:
-  cpu.waitForInterrupt = true
+  cpu.status += { sfHalted }
   result.dissasm = "HALT"
 
 op opPreCB, 1:
@@ -891,11 +894,11 @@ func step*(self: var Sm83, mem: var Mcu) =
       if interrupt in self.state.ie and interrupt in self.state.`if`:
         self.state.ime = 0
         self.state.`if` -= { interrupt }
-        self.state.waitForInterrupt = false
+        self.state.status -= { sfHalted }
         opCall(self.state, mem, InterruptHandler[interrupt])
         return
 
-  if self.state.waitForInterrupt:
+  if sfHalted in self.state.status:
     return
 
   let
