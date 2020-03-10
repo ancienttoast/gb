@@ -2,7 +2,7 @@ import
   std/strformat,
   nimgl/[glfw, opengl, imgui], nimgl/imgui/[impl_opengl, impl_glfw],
   imageman,
-  style, gb, gb/[mem, cpu, timer, display, cartridge]
+  style, gb, gb/[mem, cpu, timer, display, cartridge, joypad]
 
 
 
@@ -79,6 +79,9 @@ proc cpuWindow(state: CpuState) =
     igText(&"{state.status}")
   igEnd()
 
+var
+  keys: array[JoypadKey, bool]
+
 proc main() =
   assert glfwInit()
 
@@ -120,8 +123,27 @@ proc main() =
     prevState = gameboy.cpu.state
   for texture in oamTextures.mitems:
     texture = initTexture()
+
+  discard window.setKeyCallback(
+    proc(window: GLFWWindow, key: int32, scancode: int32, action: int32, mods: int32) {.cdecl.} =
+      case key
+      of GLFWKey.S: keys[kA] = action != GLFWRelease
+      of GLFWKey.A: keys[kB] = action != GLFWRelease
+      of GLFWKey.Enter: keys[kStart] = action != GLFWRelease
+      of GLFWKey.RightShift: keys[kSelect] = action != GLFWRelease
+      of GLFWKey.Up: keys[kUp] = action != GLFWRelease
+      of GLFWKey.Left: keys[kLeft] = action != GLFWRelease
+      of GLFWKey.Down: keys[kDown] = action != GLFWRelease
+      of GLFWKey.Right: keys[kRight] = action != GLFWRelease
+      else:
+        discard
+  )
+
   while not window.windowShouldClose:
     glfwPollEvents()
+
+    for key, state in keys:
+      gameboy.joypad.setKey(key, state)
 
     if isRunning:
       try:

@@ -9,7 +9,7 @@
 
 ]##
 import
-  gb/[mem, cpu, timer, display, cartridge]
+  gb/[mem, cpu, timer, display, cartridge, joypad]
 
 
 
@@ -19,6 +19,7 @@ type
     cpu*: Cpu
     timer*: Timer
     display*: Display
+    joypad*: Joypad
 
     cart*: Cartridge
     bootRom*: string
@@ -44,12 +45,14 @@ proc load(self: Gameboy) =
 
   self.testMemory = newSeq[uint8](uint16.high.int + 1)
 
-  self.cart = initCartridge("123/bgbw64/bgbtest.gb")
+  #self.cart = initCartridge("123/bgbw64/bgbtest.gb")
+  self.cart = initCartridge("123/Tetris (World) (Rev A).gb")
   self.mcu.clearHandlers()
   self.mcu.pushHandler(0, addr self.testMemory)
   self.mcu.pushHandler(self.cpu)
   self.mcu.pushHandler(self.timer)
   self.mcu.pushHandler(self.display)
+  self.mcu.pushHandler(self.joypad)
   
   self.mcu.pushHandlers(initMbcNone(addr self.cart.data))
   self.mcu.pushHandler(bootRomHandler)
@@ -62,7 +65,8 @@ proc newGameboy*(): Gameboy =
     mcu: mcu,
     cpu: newCpu(mcu),
     timer: newTimer(mcu),
-    display: newDisplay(mcu)
+    display: newDisplay(mcu),
+    joypad: newJoypad(mcu)
   )
   result.load()
 
