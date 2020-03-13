@@ -265,6 +265,15 @@ op opRETI, 4:
   cpu.ime = 1
   result.dissasm = "RETI"
 
+op opRST, 4:
+  const
+    Address = [0x00'u16, 0x08, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38]
+  let
+    rst = Address[(opcode and 0b00111000) shr 3]
+  cpu.push(mem, cpu.pc)
+  cpu.pc = rst
+  result.dissasm = "RST {rst:#x}"
+
 
 #[ 8bit load/store/move instructions ]#
 op opLDr8r8, 1:
@@ -524,24 +533,27 @@ op opDECA, 1:
   cpu[rA] = cpu.opDec(mem, cpu[rA])
   result.dissasm = &"DEC A"
 
+func opCp(cpu: var Sm83State, value: uint8) = 
+  let
+    res = cpu[rA] - value
+  cpu.flags ?= (res == 0, { fZero })
+  cpu.flags += { fAddSub }
+  # TODO: cpu.f.incl(fHalfCarry)
+  cpu.flags ?= (cpu[rA] < value, { fCarry })
+
 op opCPr8, 1:
   let
     r8 = ((opcode and 0b00000111) + 2).Register8
-    res = cpu[rA] - cpu[r8]
-  cpu.flags ?= (res == 0, { fZero })
-  cpu.flags += { fAddSub }
-  # TODO: cpu.f.incl(fHalfCarry)
-  cpu.flags ?= (cpu[rA] < cpu[r8], { fCarry })
+  opCp(cpu, cpu[r8])
   result.dissasm = &"CP {r8}"
 
-op opCPHL, 2:
-  let
-    res = cpu[rA].uint16 - mem[cpu[rHL]]
-  cpu.flags ?= (res == 0, { fZero })
-  cpu.flags += { fAddSub }
-  # TODO: cpu.f.incl(fHalfCarry)
-  cpu.flags ?= (cpu[rA].uint16 < cpu[rHL], { fCarry })
-  result.dissasm = &"CP HL"
+op opCPpHL, 2:
+  opCp(cpu, mem[cpu[rHL]])
+  result.dissasm = &"CP (HL)"
+
+op opCPA, 1:
+  opCp(cpu, cpu[rA])
+  result.dissasm = &"CP A"
 
 op opCPu8, 2:
   let
@@ -682,6 +694,20 @@ op opINCr16, 2:
   cpu[r16] = cpu[r16] + 1
   result.dissasm = &"INC {r16}"
 
+op opINCSP, 2:
+  cpu.sp = cpu.sp + 1
+  result.dissasm = &"INC SP"
+
+op opDECr16, 2:
+  let
+    r16 = (((opcode and 0b00110000) shr 4) + 1).Register16
+  cpu[r16] = cpu[r16] - 1
+  result.dissasm = &"DEC {r16}"
+
+op opDECSP, 2:
+  cpu.sp = cpu.sp - 1
+  result.dissasm = &"DEC SP"
+
 func opAddHl(cpu: var Sm83State, value: uint16) =
   cpu[rHL] = cpu[rHL] + value
   cpu.flags -= { fAddSub }
@@ -724,32 +750,73 @@ op opBITA, 2:
   opBit(cpu, cpu[rA], bit)
   result.dissasm = &"BIT {bit},A"
 
-op opRLr8, 2:
-  # c=1, r8=00000000 - 00000001 c=0 z=0
-  # c=0, r8=00000000 - 00000000 c=0 z=1
-  # c=0, r8=10000000 - 00000000 c=1 z=1
-  # B1010101 -> 1010101c c=B z=isNull n=0 h=0
+func opRlc(cpu: var Sm83State, value: uint8): uint8 =
+  let
+    carry = (value and 0b10000000) shr 7
+  result = (value shl 1) or carry
+  cpu.flags ?= (result == 0, { fZero })
+  cpu.flags -= { fAddSub, fHalfCarry }
+  cpu.flags ?= (carry == 1, { fCarry })
+
+op opRLCr8, 2:
   let
     r8 = ((opcode and 0b00000111) + 2).Register8
-    carry = (cpu[r8] and 0b10000000) shr 7
-  cpu[r8] = cpu[r8] shl 1
+  cpu[r8] = opRlc(cpu, cpu[r8])
+  result.dissasm = &"RLC {r8}"
+
+op opRLCpHL, 4:
+  mem[cpu[rHL]] = opRlc(cpu, mem[cpu[rHL]])
+  result.dissasm = &"RLC (HL)"
+
+op opRLCA, 2: # TOOD: Non CB version size 1
+  cpu[rA] = opRlc(cpu, cpu[rA])
+  result.dissasm = &"RLC A"
+
+func opRl(cpu: var Sm83State, value: uint8): uint8 =
+  let
+    carry = (value and 0b10000000) shr 7
+  result = value shl 1
   if fCarry in cpu.flags:
-    cpu[r8] = cpu[r8] or 1
-  cpu.flags ?= (cpu[r8] == 0, { fZero })
+    result = result or 1
+  cpu.flags ?= (result == 0, { fZero })
   cpu.flags -= { fAddSub, fHalfCarry }
   cpu.flags ?= (carry == 1, { fCarry })
+
+op opRLr8, 2:
+  let
+    r8 = ((opcode and 0b00000111) + 2).Register8
+  cpu[r8] = opRl(cpu, cpu[r8])
   result.dissasm = &"RL {r8}"
 
-op opRLA, 1:
+op opRLpHL, 4:
+  mem[cpu[rHL]] = opRl(cpu, mem[cpu[rHL]])
+  result.dissasm = &"RL (HL)"
+
+op opRLA, 2: # TOOD: Non CB version size 1
+  cpu[rA] = opRl(cpu, cpu[rA])
+  result.dissasm = &"RL A"
+
+func opSla(cpu: var Sm83State, value: uint8): uint8 =
   let
-    carry = (cpu[rA] and 0b10000000) shr 7
-  cpu[rA] = cpu[rA] shl 1
-  if fCarry in cpu.flags:
-    cpu[rA] = cpu[rA] or 1
-  cpu.flags ?= (cpu[rA] == 0, { fZero })
+    carry = (value and 0b10000000) shr 7
+  result = value shl 1
+  cpu.flags ?= (result == 0, { fZero })
   cpu.flags -= { fAddSub, fHalfCarry }
   cpu.flags ?= (carry == 1, { fCarry })
-  result.dissasm = "RL A"
+
+op opSLAr8, 2:
+  let
+    r8 = ((opcode and 0b00000111) + 2).Register8
+  cpu[r8] = opSla(cpu, cpu[r8])
+  result.dissasm = &"SLA {r8}"
+
+op opSLApHL, 4:
+  mem[cpu[rHL]] = opSla(cpu, mem[cpu[rHL]])
+  result.dissasm = &"SLA (HL)"
+
+op opSLAA, 2:
+  cpu[rA] = opSla(cpu, cpu[rA])
+  result.dissasm = &"SLA A"
 
 func opSet(bit: range[0..7], value: uint8): uint8 =
   result = value
@@ -774,6 +841,29 @@ op opSETbA, 2:
   cpu[rA] = opSet(b, cpu[rA])
   result.dissasm = &"SET {b},A"
 
+func opRes(bit: range[0..7], value: uint8): uint8 =
+  result = value
+  clearBit[uint8](result, bit)
+
+op opRESbr8, 2:
+  let
+    b = ((opcode and 0b00110000) shr 4) + ((opcode and 0b00001000) shr 3)
+    r8 = ((opcode and 0b00000111) + 2).Register8
+  cpu[r8] = opRes(b, cpu[r8])
+  result.dissasm = &"RES {b},{r8}"
+
+op opRESbpHL, 2:
+  let
+    b = ((opcode and 0b00110000) shr 4) + ((opcode and 0b00001000) shr 3)
+  mem[cpu[rHL]] = opRes(b, mem[cpu[rHL]])
+  result.dissasm = &"RES {b},(HL)"
+
+op opRESbA, 2:
+  let
+    b = ((opcode and 0b00110000) shr 4) + ((opcode and 0b00001000) shr 3)
+  cpu[rA] = opRes(b, cpu[rA])
+  result.dissasm = &"RES {b},A"
+
 func opSwap(cpu: var Sm83State, value: uint8): uint8 =
   result = ((value and 0x0f) shl 4) or ((value and 0xf0) shr 4)
   cpu.flags ?= (result == 0, { fZero })
@@ -793,13 +883,82 @@ op opSWAPA, 2:
   cpu[rA] = opSwap(cpu, cpu[rA])
   result.dissasm = &"SWAP A"
 
+func opRrc(cpu: var Sm83State, value: uint8): uint8 =
+  let
+    carry = value and 0b00000001
+  result = (value shr 1) or carry
+  cpu.flags ?= (result == 0, { fZero })
+  cpu.flags -= { fAddSub, fHalfCarry }
+  cpu.flags ?= (carry == 1, { fCarry })
+
+op opRRCr8, 2:
+  let
+    r8 = ((opcode and 0b00000111) + 2).Register8
+  cpu[r8] = opRrc(cpu, cpu[r8])
+  result.dissasm = &"RRC {r8}"
+
+op opRRCpHL, 4:
+  mem[cpu[rHL]] = opRrc(cpu, mem[cpu[rHL]])
+  result.dissasm = &"RRC (HL)"
+
+op opRRCA, 2: # TOOD: Non CB version size 1
+  cpu[rA] = opRrc(cpu, cpu[rA])
+  result.dissasm = &"RRC A"
+
+func opRr(cpu: var Sm83State, value: uint8): uint8 =
+  let
+    carry = value and 0b00000001
+  result = value shr 1
+  if fCarry in cpu.flags:
+    result = result or 1
+  cpu.flags ?= (result == 0, { fZero })
+  cpu.flags -= { fAddSub, fHalfCarry }
+  cpu.flags ?= (carry == 1, { fCarry })
+
+op opRRr8, 2:
+  let
+    r8 = ((opcode and 0b00000111) + 2).Register8
+  cpu[r8] = opRr(cpu, cpu[r8])
+  result.dissasm = &"RR {r8}"
+
+op opRRpHL, 4:
+  mem[cpu[rHL]] = opRr(cpu, mem[cpu[rHL]])
+  result.dissasm = &"RR (HL)"
+
+op opRRA, 2: # TOOD: Non CB version size 1
+  cpu[rA] = opRr(cpu, cpu[rA])
+  result.dissasm = &"RR A"
+
+func opSra(cpu: var Sm83State, value: uint8): uint8 =
+  let
+    msb = value and 0b10000000
+    carry = value and 0b00000001
+  result = (value shr 1) or msb
+  cpu.flags ?= (result == 0, { fZero })
+  cpu.flags -= { fAddSub, fHalfCarry }
+  cpu.flags ?= (carry == 1, { fCarry })
+
+op opSRAr8, 2:
+  let
+    r8 = ((opcode and 0b00000111) + 2).Register8
+  cpu[r8] = opSra(cpu, cpu[r8])
+  result.dissasm = &"SRA {r8}"
+
+op opSRApHL, 4:
+  mem[cpu[rHL]] = opSra(cpu, mem[cpu[rHL]])
+  result.dissasm = &"SRA (HL)"
+
+op opSRAA, 2:
+  cpu[rA] = opSra(cpu, cpu[rA])
+  result.dissasm = &"SRA A"
+
 func opSrl(cpu: var Sm83State, value: uint8): uint8 =
   let
-    bit = value and 0b00000001
+    carry = value and 0b00000001
   result = value shr 1
   cpu.flags ?= (result == 0, { fZero })
   cpu.flags -= { fAddSub, fHalfCarry }
-  cpu.flags ?= (bit == 1, { fCarry })
+  cpu.flags ?= (carry == 1, { fCarry })
 
 op opSRLr8, 2:
   let
@@ -818,22 +977,22 @@ op opSRLA, 2:
 
 const
   PrefixCbTable: array[256, InstructionDefinition] = [
-    opERR,    opERR,      opERR,     opERR,    opERR,       opERR,     opERR,     opERR,   opERR,       opERR,    opERR,     opERR,    opERR,       opERR,     opERR,     opERR,
-    opRLr8,   opRLr8,     opRLr8,    opRLr8,   opRLr8,      opRLr8,    opERR,     opERR,   opERR,       opERR,    opERR,     opERR,    opERR,       opERR,     opERR,     opERR,
-    opERR,    opERR,      opERR,     opERR,    opERR,       opERR,     opERR,     opERR,   opERR,       opERR,    opERR,     opERR,    opERR,       opERR,     opERR,     opERR,
-    opSWAPr8, opSWAPr8,   opSWAPr8,  opSWAPr8, opSWAPr8,    opSWAPr8,  opSWAPpHL, opSWAPA, opSRLr8,     opSRLr8,  opSRLr8,   opSRLr8,  opSRLr8,     opSRLr8,   opSRLpHL,  opSRLA,
-    opBITr8,  opBITr8,    opBITr8,   opBITr8,  opBITr8,     opBITr8,   opBITpHL,  opBITA,  opBITr8,     opBITr8,  opBITr8,   opBITr8,  opBITr8,     opBITr8,   opBITpHL,  opBITA,
-    opBITr8,  opBITr8,    opBITr8,   opBITr8,  opBITr8,     opBITr8,   opBITpHL,  opBITA,  opBITr8,     opBITr8,  opBITr8,   opBITr8,  opBITr8,     opBITr8,   opBITpHL,  opBITA,
-    opBITr8,  opBITr8,    opBITr8,   opBITr8,  opBITr8,     opBITr8,   opBITpHL,  opBITA,  opBITr8,     opBITr8,  opBITr8,   opBITr8,  opBITr8,     opBITr8,   opBITpHL,  opBITA,
-    opBITr8,  opBITr8,    opBITr8,   opBITr8,  opBITr8,     opBITr8,   opBITpHL,  opBITA,  opBITr8,     opBITr8,  opBITr8,   opBITr8,  opBITr8,     opBITr8,   opBITpHL,  opBITA,
-    opERR,    opERR,      opERR,     opERR,    opERR,       opERR,     opERR,     opERR,   opERR,       opERR,    opERR,     opERR,    opERR,       opERR,     opERR,     opERR,
-    opERR,    opERR,      opERR,     opERR,    opERR,       opERR,     opERR,     opERR,   opERR,       opERR,    opERR,     opERR,    opERR,       opERR,     opERR,     opERR,
-    opERR,    opERR,      opERR,     opERR,    opERR,       opERR,     opERR,     opERR,   opERR,       opERR,    opERR,     opERR,    opERR,       opERR,     opERR,     opERR,
-    opERR,    opERR,      opERR,     opERR,    opERR,       opERR,     opERR,     opERR,   opERR,       opERR,    opERR,     opERR,    opERR,       opERR,     opERR,     opERR,
-    opSETbr8, opSETbr8,   opSETbr8,  opSETbr8, opSETbr8,    opSETbr8,  opSETbpHL, opSETbA, opSETbr8,    opSETbr8, opSETbr8,  opSETbr8, opSETbr8,    opSETbr8,  opSETbpHL, opSETbA,
-    opSETbr8, opSETbr8,   opSETbr8,  opSETbr8, opSETbr8,    opSETbr8,  opSETbpHL, opSETbA, opSETbr8,    opSETbr8, opSETbr8,  opSETbr8, opSETbr8,    opSETbr8,  opSETbpHL, opSETbA,
-    opSETbr8, opSETbr8,   opSETbr8,  opSETbr8, opSETbr8,    opSETbr8,  opSETbpHL, opSETbA, opSETbr8,    opSETbr8, opSETbr8,  opSETbr8, opSETbr8,    opSETbr8,  opSETbpHL, opSETbA,
-    opSETbr8, opSETbr8,   opSETbr8,  opSETbr8, opSETbr8,    opSETbr8,  opSETbpHL, opSETbA, opSETbr8,    opSETbr8, opSETbr8,  opSETbr8, opSETbr8,    opSETbr8,  opSETbpHL, opSETbA,
+    opRLCr8,   opRLCr8,   opRLCr8,   opRLCr8,   opRLCr8,   opRLCr8,   opRLCpHL,  opRLCA,    opRRCr8,   opRRCr8,   opRRCr8,   opRRCr8,   opRRCr8,   opRRCr8,   opRRCpHL,  opRRCA,
+    opRLr8,    opRLr8,    opRLr8,    opRLr8,    opRLr8,    opRLr8,    opRLpHL,   opRLA,     opRRr8,    opRRr8,    opRRr8,    opRRr8,    opRRr8,    opRRr8,    opRRpHL,   opRRA,
+    opSLAr8,   opSLAr8,   opSLAr8,   opSLAr8,   opSLAr8,   opSLAr8,   opSLApHL,  opSLAA,    opSRAr8,   opSRAr8,   opSRAr8,   opSRAr8,   opSRAr8,   opSRAr8,   opSRApHL,  opSRAA,
+    opSWAPr8,  opSWAPr8,  opSWAPr8,  opSWAPr8,  opSWAPr8,  opSWAPr8,  opSWAPpHL, opSWAPA,   opSRLr8,   opSRLr8,   opSRLr8,   opSRLr8,   opSRLr8,   opSRLr8,   opSRLpHL,  opSRLA,
+    opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITpHL,  opBITA,    opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITpHL,  opBITA,
+    opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITpHL,  opBITA,    opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITpHL,  opBITA,
+    opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITpHL,  opBITA,    opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITpHL,  opBITA,
+    opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITpHL,  opBITA,    opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITpHL,  opBITA,
+    opRESbr8,  opRESbr8,  opRESbr8,  opRESbr8,  opRESbr8,  opRESbr8,  opRESbpHL, opRESbA,   opRESbr8,  opRESbr8,  opRESbr8,  opRESbr8,  opRESbr8,  opRESbr8,  opRESbpHL, opRESbA,
+    opRESbr8,  opRESbr8,  opRESbr8,  opRESbr8,  opRESbr8,  opRESbr8,  opRESbpHL, opRESbA,   opRESbr8,  opRESbr8,  opRESbr8,  opRESbr8,  opRESbr8,  opRESbr8,  opRESbpHL, opRESbA,
+    opRESbr8,  opRESbr8,  opRESbr8,  opRESbr8,  opRESbr8,  opRESbr8,  opRESbpHL, opRESbA,   opRESbr8,  opRESbr8,  opRESbr8,  opRESbr8,  opRESbr8,  opRESbr8,  opRESbpHL, opRESbA,
+    opRESbr8,  opRESbr8,  opRESbr8,  opRESbr8,  opRESbr8,  opRESbr8,  opRESbpHL, opRESbA,   opRESbr8,  opRESbr8,  opRESbr8,  opRESbr8,  opRESbr8,  opRESbr8,  opRESbpHL, opRESbA,
+    opSETbr8,  opSETbr8,  opSETbr8,  opSETbr8,  opSETbr8,  opSETbr8,  opSETbpHL, opSETbA,   opSETbr8,  opSETbr8,  opSETbr8,  opSETbr8,  opSETbr8,  opSETbr8,  opSETbpHL, opSETbA,
+    opSETbr8,  opSETbr8,  opSETbr8,  opSETbr8,  opSETbr8,  opSETbr8,  opSETbpHL, opSETbA,   opSETbr8,  opSETbr8,  opSETbr8,  opSETbr8,  opSETbr8,  opSETbr8,  opSETbpHL, opSETbA,
+    opSETbr8,  opSETbr8,  opSETbr8,  opSETbr8,  opSETbr8,  opSETbr8,  opSETbpHL, opSETbA,   opSETbr8,  opSETbr8,  opSETbr8,  opSETbr8,  opSETbr8,  opSETbr8,  opSETbpHL, opSETbA,
+    opSETbr8,  opSETbr8,  opSETbr8,  opSETbr8,  opSETbr8,  opSETbr8,  opSETbpHL, opSETbA,   opSETbr8,  opSETbr8,  opSETbr8,  opSETbr8,  opSETbr8,  opSETbr8,  opSETbpHL, opSETbA,
   ]
 
 
@@ -869,10 +1028,10 @@ op opEI, 1:
 
 const
   OpcodeTable: array[256, InstructionDefinition] = [
-    opNOP,    opLDr16u16, opLDBCA,   opINCr16, opINCr8,     opDECr8,   opLDr8d8, opERR,   opLDu16SP,   opADDHLr16, opLDABC,   opERR,    opINCr8,     opDECr8,   opLDr8d8, opERR,
-    opSTOP,   opLDr16u16, opLDDEA,   opINCr16, opINCr8,     opDECr8,   opLDr8d8, opRLA,   opJRs8,      opADDHLr16, opLDADE,   opERR,    opINCr8,     opDECr8,   opLDr8d8, opERR,
-    opJRccs8, opLDr16u16, opLDHLpA,  opINCr16, opINCr8,     opDECr8,   opLDr8d8, opERR,   opJRccs8,    opADDHLr16, opLDAHLp,  opERR,    opINCr8,     opDECr8,   opLDr8d8, opCPL,
-    opJRccs8, opLDr16u16, opLDHLmA,  opERR,    opINCpHL,    opDECpHL,  opLDHLd8, opSCF,   opJRccs8,    opADDHLSP,  opLDAHLm,  opERR,    opINCA,      opDECA,    opLDAu8,  opCCF,
+    opNOP,    opLDr16u16, opLDBCA,   opINCr16, opINCr8,     opDECr8,   opLDr8d8, opRLCA,  opLDu16SP,   opADDHLr16, opLDABC,   opDECr16, opINCr8,     opDECr8,   opLDr8d8, opRRCA,
+    opSTOP,   opLDr16u16, opLDDEA,   opINCr16, opINCr8,     opDECr8,   opLDr8d8, opRLA,   opJRs8,      opADDHLr16, opLDADE,   opDECr16, opINCr8,     opDECr8,   opLDr8d8, opRRA,
+    opJRccs8, opLDr16u16, opLDHLpA,  opINCr16, opINCr8,     opDECr8,   opLDr8d8, opERR,   opJRccs8,    opADDHLr16, opLDAHLp,  opDECr16, opINCr8,     opDECr8,   opLDr8d8, opCPL,
+    opJRccs8, opLDr16u16, opLDHLmA,  opINCSP,  opINCpHL,    opDECpHL,  opLDHLd8, opSCF,   opJRccs8,    opADDHLSP,  opLDAHLm,  opDECSP,  opINCA,      opDECA,    opLDAu8,  opCCF,
     opLDr8r8, opLDr8r8,   opLDr8r8,  opLDr8r8, opLDr8r8,    opLDr8r8,  opLDr8HL, opLDr8A, opLDr8r8,    opLDr8r8,   opLDr8r8,  opLDr8r8, opLDr8r8,    opLDr8r8,  opLDr8HL, opLDr8A,
     opLDr8r8, opLDr8r8,   opLDr8r8,  opLDr8r8, opLDr8r8,    opLDr8r8,  opLDr8HL, opLDr8A, opLDr8r8,    opLDr8r8,   opLDr8r8,  opLDr8r8, opLDr8r8,    opLDr8r8,  opLDr8HL, opLDr8A,
     opLDr8r8, opLDr8r8,   opLDr8r8,  opLDr8r8, opLDr8r8,    opLDr8r8,  opLDr8HL, opLDr8A, opLDr8r8,    opLDr8r8,   opLDr8r8,  opLDr8r8, opLDr8r8,    opLDr8r8,  opLDr8HL, opLDr8A,
@@ -880,11 +1039,11 @@ const
     opADDAr8, opADDAr8,   opADDAr8,  opADDAr8, opADDAr8,    opADDAr8,  opADDAHL, opADDAA, opERR,       opERR,      opERR,     opERR,    opERR,       opERR,     opERR,    opERR,
     opSUBr8,  opSUBr8,    opSUBr8,   opSUBr8,  opSUBr8,     opSUBr8,   opSUBHL,  opSUBA,  opERR,       opERR,      opERR,     opERR,    opERR,       opERR,     opERR,    opERR,
     opANDr8,  opANDr8,    opANDr8,   opANDr8,  opANDr8,     opANDr8,   opANDpHL, opANDA,  opXORr8,     opXORr8,    opXORr8,   opXORr8,  opXORr8,     opXORr8,   opXORpHL, opXORA,
-    opORr8,   opORr8,     opORr8,    opORr8,   opORr8,      opORr8,    opORpHL,  opORA,   opCPr8,      opCPr8,     opCPr8,    opCPr8,   opCPr8,      opCPr8,    opCPHL,   opERR,
-    opRETcc,  opPOPr16,   opJPccu16, opJPu16,  opCALLccu16, opPUSHr16, opADDAd8, opERR,   opRETcc,     opRET,      opJPccu16, opPreCB,  opCALLccu16, opCALLu16, opERR,    opERR,
-    opRETcc,  opPOPr16,   opJPccu16, opINV,    opCALLccu16, opPUSHr16, opSUBd8,  opERR,   opRETcc,     opRETI,     opJPccu16, opINV,    opCALLccu16, opINV,     opERR,    opERR,
-    opLDHu8A, opPOPr16,   opLDCA,    opINV,    opINV,       opPUSHr16, opANDd8,  opERR,   opERR,       opJPHL,     opLDu16A,  opINV,    opINV,       opINV,     opXORd8, opERR,
-    opLDHAu8, opPOPr16,   opLDAC,    opDI,     opINV,       opPUSHr16, opORd8,   opERR,   opLDHLSPps8, opLDSPHL,   opLDAu16,  opEI,     opINV,       opINV,     opCPu8,   opERR
+    opORr8,   opORr8,     opORr8,    opORr8,   opORr8,      opORr8,    opORpHL,  opORA,   opCPr8,      opCPr8,     opCPr8,    opCPr8,   opCPr8,      opCPr8,    opCPpHL,  opCPA,
+    opRETcc,  opPOPr16,   opJPccu16, opJPu16,  opCALLccu16, opPUSHr16, opADDAd8, opRST,   opRETcc,     opRET,      opJPccu16, opPreCB,  opCALLccu16, opCALLu16, opERR,    opRST,
+    opRETcc,  opPOPr16,   opJPccu16, opINV,    opCALLccu16, opPUSHr16, opSUBd8,  opRST,   opRETcc,     opRETI,     opJPccu16, opINV,    opCALLccu16, opINV,     opERR,    opRST,
+    opLDHu8A, opPOPr16,   opLDCA,    opINV,    opINV,       opPUSHr16, opANDd8,  opRST,   opERR,       opJPHL,     opLDu16A,  opINV,    opINV,       opINV,     opXORd8,  opRST,
+    opLDHAu8, opPOPr16,   opLDAC,    opDI,     opINV,       opPUSHr16, opORd8,   opRST,   opLDHLSPps8, opLDSPHL,   opLDAu16,  opEI,     opINV,       opINV,     opCPu8,   opRST
   ]
 
 

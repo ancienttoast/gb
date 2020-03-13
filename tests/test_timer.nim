@@ -1,5 +1,5 @@
 import
-  unittest,
+  std/unittest,
   gb/[mem, timer]
 
 
