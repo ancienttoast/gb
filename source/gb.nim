@@ -14,6 +14,35 @@ import
 
 
 type
+  BootRom = ref object
+    data: string
+
+proc pushHandler(mcu: Mcu, self: BootRom) =
+  let
+    bootRomHandler = MemHandler(
+      read: proc(address: MemAddress): uint8 = cast[uint8](self.data[address.int]),
+      write: proc(address: MemAddress, value: uint8) = discard,
+      area: 0.MemAddress ..< 256.MemAddress
+    )
+    bootRomDisableHandler = MemHandler(
+      read: proc(address: MemAddress): uint8 = 0,
+      write: proc(address: MemAddress, value: uint8) =
+        mcu.popHandler()
+        mcu.popHandler()
+      ,
+      area: 0xff50.MemAddress .. 0xff50.MemAddress
+    )
+  mcu.pushHandler(bootRomHandler)
+  mcu.pushHandler(bootRomDisableHandler)
+
+proc newBootRom(file: string): BootRom =
+  result = BootRom(
+    data: readFile(file)
+  )
+  assert result.data.len == 256
+
+
+type
   Gameboy* = ref object
     mcu*: Mcu
     cpu*: Cpu
@@ -21,32 +50,16 @@ type
     display*: Display
     joypad*: Joypad
 
+    boot: BootRom
     cart*: Cartridge
     bootRom*: string
     testMemory*: seq[uint8]
 
-proc load(self: Gameboy) =
-  self.bootRom = readFile("123/[BIOS] Nintendo Game Boy Boot ROM (World).gb")
-  let
-    bootRomHandler = MemHandler(
-      read: proc(address: MemAddress): uint8 = cast[uint8](self.bootRom[address.int]),
-      write: proc(address: MemAddress, value: uint8) = discard,
-      area: 0.MemAddress ..< 256.MemAddress
-    )
-    bootRomDisableHandler = MemHandler(
-      read: proc(address: MemAddress): uint8 = 0,
-      write: proc(address: MemAddress, value: uint8) =
-        self.mcu.popHandler()
-        self.mcu.popHandler()
-      ,
-      area: 0xff50.MemAddress .. 0xff50.MemAddress
-    )
-  assert self.bootRom.len == 256
-
+proc load*(self: Gameboy, rom: string) =
   self.testMemory = newSeq[uint8](uint16.high.int + 1)
 
-  #self.cart = initCartridge("123/bgbw64/bgbtest.gb")
-  self.cart = initCartridge("123/Tetris (World) (Rev A).gb")
+  self.cart = initCartridge(rom)
+
   self.mcu.clearHandlers()
   self.mcu.pushHandler(0, addr self.testMemory)
   self.mcu.pushHandler(self.cpu)
@@ -54,11 +67,10 @@ proc load(self: Gameboy) =
   self.mcu.pushHandler(self.display)
   self.mcu.pushHandler(self.joypad)
   
-  self.mcu.pushHandlers(initMbcNone(addr self.cart.data))
-  self.mcu.pushHandler(bootRomHandler)
-  self.mcu.pushHandler(bootRomDisableHandler)
+  self.mcu.pushHandlers(self.cart)
+  self.mcu.pushHandler(self.boot)
 
-proc newGameboy*(): Gameboy =
+proc newGameboy*(bootRom: string): Gameboy =
   let
     mcu = newMcu()
   result = Gameboy(
@@ -66,29 +78,6 @@ proc newGameboy*(): Gameboy =
     cpu: newCpu(mcu),
     timer: newTimer(mcu),
     display: newDisplay(mcu),
-    joypad: newJoypad(mcu)
+    joypad: newJoypad(mcu),
+    boot: newBootRom(bootRom)
   )
-  result.load()
-
-
-
-when isMainModule:
-  proc main() =
-    var
-      gameboy = newGameboy()
-    try:
-      while gameboy.testMemory[0xff50] != 1:
-        gameboy.cpu.step(gameboy.mcu)
-        gameboy.timer.step()
-        gameboy.display.step()
-    except:
-      echo getCurrentException().msg
-      echo getStackTrace(getCurrentException())
-      echo "cpu\t", gameboy.cpu.state
-      echo "display\t", gameboy.display.state
-
-    gameboy.display.renderTiles(0).savePNG("block0.png")
-    gameboy.display.renderTiles(1).savePNG("block1.png")
-    gameboy.display.renderTiles(2).savePNG("block2.png")
-
-  main()

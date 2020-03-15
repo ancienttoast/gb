@@ -87,21 +87,6 @@ const
   HeaderArea = 0x0100..0x014f
 
 
-type
-  Cartridge* = object
-    data*: string
-
-proc initCartridge*(file: string): Cartridge =
-  let
-    data = readFile(file)
-  assert (data[0x0147].CartridgeType == ctRom or data[0x0147].CartridgeType == ctMbc1) and
-    data[0x0148].CartridgeRomSize == crs32KByte and
-    data[0x0149].CartridgeRamSize == crsNone
-
-  Cartridge(
-    data: data
-  )
-
 
 const
   CartridgeStartAddress = 0
@@ -109,11 +94,7 @@ const
 type
   Mbc = seq[MemHandler]
 
-proc pushHandlers*(mcu: var Mcu, mbc: Mbc) =
-  for handler in mbc:
-    mcu.pushHandler(handler)
-
-proc initMbcNone*(data: ptr string): Mbc =
+proc initMbcNone(data: ptr string): Mbc =
   assert data[].len == 32768
   result = newSeq[MemHandler]()
   result &= MemHandler(
@@ -123,3 +104,26 @@ proc initMbcNone*(data: ptr string): Mbc =
       discard,
     area: CartridgeStartAddress.MemAddress ..< 32768.MemAddress
   )
+
+
+
+type
+  Cartridge* = ref object
+    data*: string
+    mbc: Mbc
+
+proc initCartridge*(file: string): Cartridge =
+  let
+    data = readFile(file)
+  assert (data[0x0147].CartridgeType == ctRom or data[0x0147].CartridgeType == ctMbc1) and
+    data[0x0148].CartridgeRomSize == crs32KByte and
+    data[0x0149].CartridgeRamSize == crsNone
+
+  result = Cartridge(
+    data: data
+  )
+  result.mbc = initMbcNone(addr result.data)
+
+proc pushHandlers*(mcu: var Mcu, cart: Cartridge) =
+  for handler in cart.mbc:
+    mcu.pushHandler(handler)

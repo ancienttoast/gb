@@ -2,7 +2,14 @@ import
   std/strformat,
   nimgl/[glfw, opengl, imgui], nimgl/imgui/[impl_opengl, impl_glfw],
   imageman,
-  style, gb, gb/[mem, cpu, timer, display, cartridge, joypad]
+  style, gb, gb/[cpu, timer, display, joypad]
+
+
+
+const
+  BootRom = "123/[BIOS] Nintendo Game Boy Boot ROM (World).gb"
+  #Rom = "123/gb-test-roms-master/cpu_instrs/individual/01-special.gb"
+  Rom = "123/Tetris (World) (Rev A).gb"
 
 
 
@@ -81,6 +88,7 @@ proc cpuWindow(state: CpuState) =
 
 var
   keys: array[JoypadKey, bool]
+  newRom = ""
 
 proc main() =
   assert glfwInit()
@@ -109,7 +117,7 @@ proc main() =
   styleVGui()
 
   var
-    gameboy = newGameboy()
+    gameboy = newGameboy(BootRom)
     isRunning = true
     showBgMap = true
     showSpriteMap = true
@@ -123,6 +131,8 @@ proc main() =
     prevState = gameboy.cpu.state
   for texture in oamTextures.mitems:
     texture = initTexture()
+
+  gameboy.load(Rom)
 
   discard window.setKeyCallback(
     proc(window: GLFWWindow, key: int32, scancode: int32, action: int32, mods: int32) {.cdecl.} =
@@ -139,8 +149,19 @@ proc main() =
         discard
   )
 
+  discard window.setDropCallback(
+    proc(window: GLFWWindow, path_count: int32, paths: cstringArray) {.cdecl.} =
+      if path_count > 0:
+        newRom = $paths[0]
+  )
+
   while not window.windowShouldClose:
     glfwPollEvents()
+
+    if newRom != "":
+      gameboy = newGameboy(BootRom)
+      gameboy.load(newRom)
+      newRom = ""
 
     for key, state in keys:
       gameboy.joypad.setKey(key, state)
@@ -237,7 +258,8 @@ proc main() =
       igBegin("Controls")
 
       if igButton("Reset"):
-        gameboy = newGameboy()
+        gameboy = newGameboy(BootRom)
+        gameboy.load(Rom)
         gbRunning = true
       
       igSeparator()
