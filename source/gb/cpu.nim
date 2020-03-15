@@ -174,7 +174,7 @@ op opERR, 1:
   raise newException(Exception, "Not implemented opcode: " & opcode.int.toHex(2))
 
 op opINV, 1:
-  raise newException(Exception, "Invalid opcode")
+  result.dissasm = "Invalid opcode (" & opcode.int.toHex(2) & ")"
 
 
 #[ Jumps/calls ]#
@@ -295,11 +295,15 @@ op opLDr8HL, 2:
   cpu[xxx] = mem[cpu[rHL]]
   result.dissasm = &"LD {xxx},(HL)"
 
-op opLDHLr8, 2:
+op opLDpHLr8, 2:
   let
-    xxx = (((opcode and 0b00111000) shr 3) + 2).Register8
+    xxx = ((opcode and 0b00000111) + 2).Register8
   mem[cpu[rHL]] = cpu[xxx]
   result.dissasm = &"LD (HL),{xxx}"
+
+op opLDpHLA, 2:
+  mem[cpu[rHL]] = cpu[rA]
+  result.dissasm = "LD (HL),A"
 
 op opLDHLd8, 3:
   mem[cpu[rHL]] = cpu.readNext(mem)
@@ -320,10 +324,6 @@ op opLDr8A, 1:
     xxx = (((opcode and 0b00111000) shr 3) + 2).Register8
   cpu[xxx] = cpu[rA]
   result.dissasm = &"LD {xxx},A"
-
-op opLDHLA, 2:
-  mem[cpu[rHL]] = cpu[rA]
-  result.dissasm = "LD (HL),A"
 
 op opLDAHL, 2:
   cpu[rA] = mem[cpu[rHL]]
@@ -1028,22 +1028,22 @@ op opEI, 1:
 
 const
   OpcodeTable: array[256, InstructionDefinition] = [
-    opNOP,    opLDr16u16, opLDBCA,   opINCr16, opINCr8,     opDECr8,   opLDr8d8, opRLCA,  opLDu16SP,   opADDHLr16, opLDABC,   opDECr16, opINCr8,     opDECr8,   opLDr8d8, opRRCA,
-    opSTOP,   opLDr16u16, opLDDEA,   opINCr16, opINCr8,     opDECr8,   opLDr8d8, opRLA,   opJRs8,      opADDHLr16, opLDADE,   opDECr16, opINCr8,     opDECr8,   opLDr8d8, opRRA,
-    opJRccs8, opLDr16u16, opLDHLpA,  opINCr16, opINCr8,     opDECr8,   opLDr8d8, opERR,   opJRccs8,    opADDHLr16, opLDAHLp,  opDECr16, opINCr8,     opDECr8,   opLDr8d8, opCPL,
-    opJRccs8, opLDr16u16, opLDHLmA,  opINCSP,  opINCpHL,    opDECpHL,  opLDHLd8, opSCF,   opJRccs8,    opADDHLSP,  opLDAHLm,  opDECSP,  opINCA,      opDECA,    opLDAu8,  opCCF,
-    opLDr8r8, opLDr8r8,   opLDr8r8,  opLDr8r8, opLDr8r8,    opLDr8r8,  opLDr8HL, opLDr8A, opLDr8r8,    opLDr8r8,   opLDr8r8,  opLDr8r8, opLDr8r8,    opLDr8r8,  opLDr8HL, opLDr8A,
-    opLDr8r8, opLDr8r8,   opLDr8r8,  opLDr8r8, opLDr8r8,    opLDr8r8,  opLDr8HL, opLDr8A, opLDr8r8,    opLDr8r8,   opLDr8r8,  opLDr8r8, opLDr8r8,    opLDr8r8,  opLDr8HL, opLDr8A,
-    opLDr8r8, opLDr8r8,   opLDr8r8,  opLDr8r8, opLDr8r8,    opLDr8r8,  opLDr8HL, opLDr8A, opLDr8r8,    opLDr8r8,   opLDr8r8,  opLDr8r8, opLDr8r8,    opLDr8r8,  opLDr8HL, opLDr8A,
-    opLDHLr8, opLDHLr8,   opLDHLr8,  opLDHLr8, opLDHLr8,    opLDHLr8,  opHALT,   opLDHLA, opLDAr8,     opLDAr8,    opLDAr8,   opLDAr8,  opLDAr8,     opLDAr8,   opLDAHL,  opLDAA,
-    opADDAr8, opADDAr8,   opADDAr8,  opADDAr8, opADDAr8,    opADDAr8,  opADDAHL, opADDAA, opERR,       opERR,      opERR,     opERR,    opERR,       opERR,     opERR,    opERR,
-    opSUBr8,  opSUBr8,    opSUBr8,   opSUBr8,  opSUBr8,     opSUBr8,   opSUBHL,  opSUBA,  opERR,       opERR,      opERR,     opERR,    opERR,       opERR,     opERR,    opERR,
-    opANDr8,  opANDr8,    opANDr8,   opANDr8,  opANDr8,     opANDr8,   opANDpHL, opANDA,  opXORr8,     opXORr8,    opXORr8,   opXORr8,  opXORr8,     opXORr8,   opXORpHL, opXORA,
-    opORr8,   opORr8,     opORr8,    opORr8,   opORr8,      opORr8,    opORpHL,  opORA,   opCPr8,      opCPr8,     opCPr8,    opCPr8,   opCPr8,      opCPr8,    opCPpHL,  opCPA,
-    opRETcc,  opPOPr16,   opJPccu16, opJPu16,  opCALLccu16, opPUSHr16, opADDAd8, opRST,   opRETcc,     opRET,      opJPccu16, opPreCB,  opCALLccu16, opCALLu16, opERR,    opRST,
-    opRETcc,  opPOPr16,   opJPccu16, opINV,    opCALLccu16, opPUSHr16, opSUBd8,  opRST,   opRETcc,     opRETI,     opJPccu16, opINV,    opCALLccu16, opINV,     opERR,    opRST,
-    opLDHu8A, opPOPr16,   opLDCA,    opINV,    opINV,       opPUSHr16, opANDd8,  opRST,   opERR,       opJPHL,     opLDu16A,  opINV,    opINV,       opINV,     opXORd8,  opRST,
-    opLDHAu8, opPOPr16,   opLDAC,    opDI,     opINV,       opPUSHr16, opORd8,   opRST,   opLDHLSPps8, opLDSPHL,   opLDAu16,  opEI,     opINV,       opINV,     opCPu8,   opRST
+    opNOP,     opLDr16u16, opLDBCA,   opINCr16,  opINCr8,     opDECr8,   opLDr8d8, opRLCA,   opLDu16SP,   opADDHLr16, opLDABC,   opDECr16, opINCr8,     opDECr8,   opLDr8d8, opRRCA,
+    opSTOP,    opLDr16u16, opLDDEA,   opINCr16,  opINCr8,     opDECr8,   opLDr8d8, opRLA,    opJRs8,      opADDHLr16, opLDADE,   opDECr16, opINCr8,     opDECr8,   opLDr8d8, opRRA,
+    opJRccs8,  opLDr16u16, opLDHLpA,  opINCr16,  opINCr8,     opDECr8,   opLDr8d8, opERR,    opJRccs8,    opADDHLr16, opLDAHLp,  opDECr16, opINCr8,     opDECr8,   opLDr8d8, opCPL,
+    opJRccs8,  opLDr16u16, opLDHLmA,  opINCSP,   opINCpHL,    opDECpHL,  opLDHLd8, opSCF,    opJRccs8,    opADDHLSP,  opLDAHLm,  opDECSP,  opINCA,      opDECA,    opLDAu8,  opCCF,
+    opLDr8r8,  opLDr8r8,   opLDr8r8,  opLDr8r8,  opLDr8r8,    opLDr8r8,  opLDr8HL, opLDr8A,  opLDr8r8,    opLDr8r8,   opLDr8r8,  opLDr8r8, opLDr8r8,    opLDr8r8,  opLDr8HL, opLDr8A,
+    opLDr8r8,  opLDr8r8,   opLDr8r8,  opLDr8r8,  opLDr8r8,    opLDr8r8,  opLDr8HL, opLDr8A,  opLDr8r8,    opLDr8r8,   opLDr8r8,  opLDr8r8, opLDr8r8,    opLDr8r8,  opLDr8HL, opLDr8A,
+    opLDr8r8,  opLDr8r8,   opLDr8r8,  opLDr8r8,  opLDr8r8,    opLDr8r8,  opLDr8HL, opLDr8A,  opLDr8r8,    opLDr8r8,   opLDr8r8,  opLDr8r8, opLDr8r8,    opLDr8r8,  opLDr8HL, opLDr8A,
+    opLDpHLr8, opLDpHLr8,  opLDpHLr8, opLDpHLr8, opLDpHLr8,   opLDpHLr8, opHALT,   opLDpHLA, opLDAr8,     opLDAr8,    opLDAr8,   opLDAr8,  opLDAr8,     opLDAr8,   opLDAHL,  opLDAA,
+    opADDAr8,  opADDAr8,   opADDAr8,  opADDAr8,  opADDAr8,    opADDAr8,  opADDAHL, opADDAA,  opERR,       opERR,      opERR,     opERR,    opERR,       opERR,     opERR,    opERR,
+    opSUBr8,   opSUBr8,    opSUBr8,   opSUBr8,   opSUBr8,     opSUBr8,   opSUBHL,  opSUBA,   opERR,       opERR,      opERR,     opERR,    opERR,       opERR,     opERR,    opERR,
+    opANDr8,   opANDr8,    opANDr8,   opANDr8,   opANDr8,     opANDr8,   opANDpHL, opANDA,   opXORr8,     opXORr8,    opXORr8,   opXORr8,  opXORr8,     opXORr8,   opXORpHL, opXORA,
+    opORr8,    opORr8,     opORr8,    opORr8,    opORr8,      opORr8,    opORpHL,  opORA,    opCPr8,      opCPr8,     opCPr8,    opCPr8,   opCPr8,      opCPr8,    opCPpHL,  opCPA,
+    opRETcc,   opPOPr16,   opJPccu16, opJPu16,   opCALLccu16, opPUSHr16, opADDAd8, opRST,    opRETcc,     opRET,      opJPccu16, opPreCB,  opCALLccu16, opCALLu16, opERR,    opRST,
+    opRETcc,   opPOPr16,   opJPccu16, opINV,     opCALLccu16, opPUSHr16, opSUBd8,  opRST,    opRETcc,     opRETI,     opJPccu16, opINV,    opCALLccu16, opINV,     opERR,    opRST,
+    opLDHu8A,  opPOPr16,   opLDCA,    opINV,     opINV,       opPUSHr16, opANDd8,  opRST,    opERR,       opJPHL,     opLDu16A,  opINV,    opINV,       opINV,     opXORd8,  opRST,
+    opLDHAu8,  opPOPr16,   opLDAC,    opDI,      opINV,       opPUSHr16, opORd8,   opRST,    opLDHLSPps8, opLDSPHL,   opLDAu16,  opEI,     opINV,       opINV,     opCPu8,   opRST
   ]
 
 

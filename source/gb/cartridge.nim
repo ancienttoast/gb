@@ -94,9 +94,10 @@ type
 proc initCartridge*(file: string): Cartridge =
   let
     data = readFile(file)
-  assert data[0x0147].CartridgeType == ctRom
-  assert data[0x0148].CartridgeRomSize == crs32KByte
-  assert data[0x0149].CartridgeRamSize == crsNone
+  assert (data[0x0147].CartridgeType == ctRom or data[0x0147].CartridgeType == ctMbc1) and
+    data[0x0148].CartridgeRomSize == crs32KByte and
+    data[0x0149].CartridgeRamSize == crsNone
+
   Cartridge(
     data: data
   )
