@@ -263,6 +263,12 @@ proc renderBackground*(self: Display): Image[ColorRGBU] =
   result.drawLine(max(0, min0[0]), max(0, min0[1]), min(255, min0[0]), min(255, max0[1]), [255'u8, 0, 0].ColorRGBU)
   result.drawLine(max(0, min0[0]), max(0, min0[1]), min(255, max0[0]), min(255, min0[1]), [255'u8, 0, 0].ColorRGBU)
 
+  for x in 1..31:
+    result.drawLine(x*8, 0, x*8, result.height - 1, [0'u8, 255, 0].ColorRGBU)
+  for y in 1..31:
+    result.drawLine(0, y*8, result.width - 1, y*8, [0'u8, 255, 0].ColorRGBU)
+
+
 proc renderSprites*(self: Display): Image[ColorRGBU] =
   result = initImage[ColorRGBU](Width, Height)
   for sprite in self.state.oam:

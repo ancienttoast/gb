@@ -64,6 +64,28 @@ suite "LR35902 - 8bit load/store/move instructions":
         s.pc += 2
         s[rB] = 5
       oldM = mem.modMem
+  
+  cpuTest "LD (3),A":
+    mem[0] = 0xea'u8
+    mem[1] = 3'u8
+    mem[2] = 0'u8
+    cpu.state[rA] = 5
+    let
+      oldS = cpu.modState:
+        s.pc += 3
+      oldM = mem.modMem:
+        m[3] = 5
+
+  cpuTest "LD A,(3)":
+    mem[0] = 0xfa'u8
+    mem[1] = 3'u8
+    mem[2] = 0'u8
+    mem[3] = 5
+    let
+      oldS = cpu.modState:
+        s.pc += 3
+        s[rA] = 5
+      oldM = mem.modMem
 
 
 suite "LR35902 - 16bit arithmetic/logical instructions":

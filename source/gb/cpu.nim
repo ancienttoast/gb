@@ -37,10 +37,10 @@ type
     fUnused1
     fUnused2
     fUnused3
-    fCarry      ## cy - Carry flag
-    fHalfCarry  ## h  - Half carry flag
-    fAddSub     ## n  - Add/Sub-flag
-    fZero       ## zf - Zero flag
+    fCarry      ## c - Carry flag
+    fHalfCarry  ## h - Half carry flag
+    fAddSub     ## n - Add/Sub-flag
+    fZero       ## z - Zero flag
   
   JumpCondition = enum
     jcNZ = (0b00, "NZ") ## Z flag not set
@@ -86,8 +86,8 @@ type
 
 const
   Registers*: array[Register16, array[2, Register8]] = [ [rA, rF], [rB, rC], [rD, rE], [rH, rL] ]
-
   InterruptHandler: array[Interrupt, MemAddress] = [ 0x40.MemAddress, 0x48, 0x50, 0x58, 0x60 ]
+  IfAddress = 0xff0f.MemAddress
 
 proc pushHandler*(mcu: Mcu, self: Sm83) =
   mcu.pushHandler(0xffff, cast[ptr uint8](addr self.state.ie))
@@ -98,6 +98,13 @@ proc newCpu*(mcu: Mcu): Sm83 =
     # TODO: default values
   )
   mcu.pushHandler(result)
+
+
+proc raiseInterrupt*(mcu: Mcu, interrupt: Interrupt) =
+  var
+    table = mcu.read(IfAddress)
+  setBit(table, interrupt.ord)
+  mcu.write(IfAddress, table)
 
 
 template `[]`*(self: Sm83State, register: Register8): uint8 =
@@ -369,12 +376,12 @@ op opLDHLmA, 2:
   cpu[rHL] = cpu[rHL] - 1
   result.dissasm = "LD (HL-),A"
 
-op opLDCA, 2:
+op opLDpCA, 2:
   ## Put A into memory at address 0xff00 + C
   mem[0xff00'u16 + cpu[rC].uint16] = cpu[rA]
   result.dissasm = "LD (C),A"
 
-op opLDAC, 2:
+op opLDApC, 2:
   ## Put memory value at address 0xff00 + C into A
   cpu[rA] = mem[0xff00'u16 + cpu[rC].uint16]
   result.dissasm = "LD A,(C)"
@@ -394,18 +401,17 @@ op opLDHu8A, 3:
   result.dissasm = &"LDH {u8:#x},A"
 
 op opLDAu16, 4:
-  ## Put A into memory at address 0xff00 + u16
   let
     u16 = cpu.nn(mem)
-  cpu[rA] = mem[0xff00'u16 + u16]
-  result.dissasm = &"LD A,{u16:#x}"
+  cpu[rA] = mem[u16]
+
+  result.dissasm = &"LD A,({u16:#x})"
 
 op opLDu16A, 4:
-  ## Put memory value at address 0xff00 + u16 into A
   let
     u16 = cpu.nn(mem)
-  mem[0xff00'u16 + u16] = cpu[rA]
-  result.dissasm = &"LD {u16:#x},A"
+  mem[u16] = cpu[rA]
+  result.dissasm = &"LD ({u16:#x}),A"
 
 
 #[ 16bit load/store/move instructions ]#
@@ -1042,12 +1048,12 @@ const
     opORr8,    opORr8,     opORr8,    opORr8,    opORr8,      opORr8,    opORpHL,  opORA,    opCPr8,      opCPr8,     opCPr8,    opCPr8,   opCPr8,      opCPr8,    opCPpHL,  opCPA,
     opRETcc,   opPOPr16,   opJPccu16, opJPu16,   opCALLccu16, opPUSHr16, opADDAd8, opRST,    opRETcc,     opRET,      opJPccu16, opPreCB,  opCALLccu16, opCALLu16, opERR,    opRST,
     opRETcc,   opPOPr16,   opJPccu16, opINV,     opCALLccu16, opPUSHr16, opSUBd8,  opRST,    opRETcc,     opRETI,     opJPccu16, opINV,    opCALLccu16, opINV,     opERR,    opRST,
-    opLDHu8A,  opPOPr16,   opLDCA,    opINV,     opINV,       opPUSHr16, opANDd8,  opRST,    opERR,       opJPHL,     opLDu16A,  opINV,    opINV,       opINV,     opXORd8,  opRST,
-    opLDHAu8,  opPOPr16,   opLDAC,    opDI,      opINV,       opPUSHr16, opORd8,   opRST,    opLDHLSPps8, opLDSPHL,   opLDAu16,  opEI,     opINV,       opINV,     opCPu8,   opRST
+    opLDHu8A,  opPOPr16,   opLDpCA,   opINV,     opINV,       opPUSHr16, opANDd8,  opRST,    opERR,       opJPHL,     opLDu16A,  opINV,    opINV,       opINV,     opXORd8,  opRST,
+    opLDHAu8,  opPOPr16,   opLDApC,   opDI,      opINV,       opPUSHr16, opORd8,   opRST,    opLDHLSPps8, opLDSPHL,   opLDAu16,  opEI,     opINV,       opINV,     opCPu8,   opRST
   ]
 
 
-func step*(self: var Sm83, mem: var Mcu) =
+func step*(self: var Sm83, mem: var Mcu): int {.discardable.} =
   if self.state.ime == 1:
     for interrupt in Interrupt:
       if interrupt in self.state.ie and interrupt in self.state.`if`:
@@ -1065,5 +1071,6 @@ func step*(self: var Sm83, mem: var Mcu) =
     opcode = self.state.readNext(mem)
     instruction = OpcodeTable[opcode.int]
   let
-    (_, dissasm) = instruction.f(opcode, self.state, mem)
-  #debugEcho &"{position:#06x}  {dissasm:<20}{self.state}"
+    (cycles, dissasm) = instruction.f(opcode, self.state, mem)
+  #debugEcho &"{position:#06x}  {dissasm:<20} ({opcode:#04x}) {self.state}"
+  cycles

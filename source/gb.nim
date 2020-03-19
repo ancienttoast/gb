@@ -55,10 +55,8 @@ type
     bootRom*: string
     testMemory*: seq[uint8]
 
-proc load*(self: Gameboy, rom: string) =
+proc load*(self: Gameboy, rom = "") =
   self.testMemory = newSeq[uint8](uint16.high.int + 1)
-
-  self.cart = initCartridge(rom)
 
   self.mcu.clearHandlers()
   self.mcu.pushHandler(0, addr self.testMemory)
@@ -67,7 +65,9 @@ proc load*(self: Gameboy, rom: string) =
   self.mcu.pushHandler(self.display)
   self.mcu.pushHandler(self.joypad)
   
-  self.mcu.pushHandlers(self.cart)
+  if rom != "":
+    self.cart = initCartridge(rom)
+    self.mcu.pushHandlers(self.cart)
   self.mcu.pushHandler(self.boot)
 
 proc newGameboy*(bootRom: string): Gameboy =

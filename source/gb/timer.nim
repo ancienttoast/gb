@@ -16,7 +16,7 @@
 
 ]##
 import
-  mem
+  mem, cpu
 
 
 
@@ -62,7 +62,7 @@ proc step*(self: Timer) =
     self.state.tima += 1
     if self.state.tima == 0:
       self.state.tima = self.state.tma
-      self.mcu.write(0xff0f, self.mcu.read(0xff0f) or 0b00000100)
+      self.mcu.raiseInterrupt(iTimer)
   
   if self.state.counter == TimerCycleCounter.high:
     self.state.counter = TimerCycleCounter.low
