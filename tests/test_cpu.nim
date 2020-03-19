@@ -86,6 +86,48 @@ suite "LR35902 - 8bit load/store/move instructions":
         s.pc += 3
         s[rA] = 5
       oldM = mem.modMem
+  
+  const
+    Ldr8r8Tests = [
+      (0x7f, rA, rA), (0x78, rA, rB), (0x79, rA, rC), (0x7a, rA, rD), (0x7b, rA, rE), (0x7c, rA, rH), (0x7d, rA, rL),
+      (0x47, rB, rA), (0x40, rB, rB), (0x41, rB, rC), (0x42, rB, rD), (0x43, rB, rE), (0x44, rB, rH), (0x45, rB, rL),
+      (0x4f, rC, rA), (0x48, rC, rB), (0x49, rC, rC), (0x4a, rC, rD), (0x4b, rC, rE), (0x4c, rC, rH), (0x4d, rC, rL),
+      (0x57, rD, rA), (0x50, rD, rB), (0x51, rD, rC), (0x52, rD, rD), (0x53, rD, rE), (0x54, rD, rH), (0x55, rD, rL),
+      (0x5f, rE, rA), (0x58, rE, rB), (0x59, rE, rC), (0x5a, rE, rD), (0x5b, rE, rE), (0x5c, rE, rH), (0x5d, rE, rL),
+      (0x67, rH, rA), (0x60, rH, rB), (0x61, rH, rC), (0x62, rH, rD), (0x63, rH, rE), (0x64, rH, rH), (0x65, rH, rL),
+      (0x6f, rL, rA), (0x68, rL, rB), (0x69, rL, rC), (0x6a, rL, rD), (0x6b, rL, rE), (0x6c, rL, rH), (0x6d, rL, rL)
+    ]
+  for reg in Ldr8r8Tests:
+    cpuTest &"LD {reg[1]},{reg[2]}":
+      mem[0] = reg[0].uint8
+      cpu.state[reg[2]] = 5
+      let
+        oldS = cpu.modState:
+          s.pc += 1
+          s[reg[1]] = 5
+        oldM = mem.modMem
+
+  for reg in [(0x7e, rA), (0x46, rB), (0x4e, rC), (0x56, rD), (0x5e, rE), (0x66, rH), (0x6e, rL)]:
+    cpuTest &"LD {reg[1]},(HL)":
+      mem[0] = reg[0].uint8
+      mem[3] = 5
+      cpu.state[rHL] = 3
+      let
+        oldS = cpu.modState:
+          s.pc += 1
+          s[reg[1]] = 5
+        oldM = mem.modMem
+  
+  for reg in [(0x77, rA), (0x70, rB), (0x71, rC), (0x72, rD), (0x73, rE)#[, (0x74, rH), (0x75, rL)]#]:
+    cpuTest &"LD (HL),{reg[1]}":
+      mem[0] = reg[0].uint8
+      cpu.state[reg[1]] = 5
+      cpu.state[rHL] = 3
+      let
+        oldS = cpu.modState:
+          s.pc += 1
+        oldM = mem.modMem:
+          m[3] = 5
 
 
 suite "LR35902 - 16bit arithmetic/logical instructions":
