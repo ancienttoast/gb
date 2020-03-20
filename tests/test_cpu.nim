@@ -128,6 +128,96 @@ suite "LR35902 - 8bit load/store/move instructions":
           s.pc += 1
         oldM = mem.modMem:
           m[3] = 5
+  
+  for reg in [(0x3e, rA), (0x06, rB), (0x0e, rC), (0x16, rD), (0x1e, rE), (0x26, rH), (0x2e, rL)]:
+    cpuTest &"LD {reg[1]},8":
+      mem[0] = reg[0].uint8
+      mem[1] = 8
+      let
+        oldS = cpu.modState:
+          s.pc += 2
+          s[reg[1]] = 8
+        oldM = mem.modMem
+  
+  cpuTest &"LD (HL),8":
+    mem[0] = 0x36'u8
+    mem[1] = 8
+    cpu.state[rHL] = 3
+    let
+      oldS = cpu.modState:
+        s.pc += 2
+      oldM = mem.modMem:
+        m[3] = 8
+  
+  for reg in [(0x02, rBC), (0x12, rDE)]:
+    cpuTest &"LD ({reg[1]}),A":
+      mem[0] = reg[0].uint8
+      cpu.state[rA] = 8
+      cpu.state[reg[1]] = 3
+      let
+        oldS = cpu.modState:
+          s.pc += 1
+        oldM = mem.modMem:
+          m[3] = 8
+  
+  for reg in [(0x0a, rBC), (0x1a, rDE)]:
+    cpuTest &"LD A,({reg[1]})":
+      mem[0] = reg[0].uint8
+      mem[3] = 8
+      cpu.state[reg[1]] = 3
+      let
+        oldS = cpu.modState:
+          s.pc += 1
+          s[rA] = 8
+        oldM = mem.modMem
+  
+  cpuTest "LD (HL+),A":
+    mem[0] = 0x22'u8
+    cpu.state[rA] = 8
+    cpu.state[rHL] = 3
+    let
+      oldS = cpu.modState:
+        s.pc += 1
+        s[rHL] = 4
+      oldM = mem.modMem:
+        m[3] = 8
+  
+  cpuTest "LD (HL-),A":
+    mem[0] = 0x32'u8
+    cpu.state[rA] = 8
+    cpu.state[rHL] = 3
+    let
+      oldS = cpu.modState:
+        s.pc += 1
+        s[rHL] = 2
+      oldM = mem.modMem:
+        m[3] = 8
+  
+  cpuTest "LD A,(HL+)":
+    mem[0] = 0x2a'u8
+    mem[3] = 8
+    cpu.state[rHL] = 3
+    let
+      oldS = cpu.modState:
+        s.pc += 1
+        s[rHL] = 4
+        s[rA] = 8
+      oldM = mem.modMem
+  
+  cpuTest "LD A,(HL-)":
+    mem[0] = 0x3a'u8
+    mem[3] = 8
+    cpu.state[rHL] = 3
+    let
+      oldS = cpu.modState:
+        s.pc += 1
+        s[rHL] = 2
+        s[rA] = 8
+      oldM = mem.modMem
+
+
+suite "LR35902 - 8bit load/store/move instructions":
+  discard
 
 
 suite "LR35902 - 16bit arithmetic/logical instructions":
