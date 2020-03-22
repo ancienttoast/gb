@@ -40,6 +40,70 @@ suite "LR35902 - Misc/control instructions":
       oldS = cpu.modState:
         s.pc += 1
       oldM = mem.modMem
+  
+  test "STOP":
+    skip
+
+  cpuTest "HALT":
+    mem[0] = 0x76'u8
+    let
+      oldS = cpu.modState:
+        s.pc += 1
+        s.status = { sfHalted }
+      oldM = mem.modMem
+  
+  test "HALT - halted":
+    var
+      mem = newSeq[uint8](8)
+      mcu = newMcu(addr mem)
+      cpu = newCpu(mcu)
+    mem[0] = 0x76'u8
+    mem[1] = 0x00'u8
+    cpu.step(mcu)
+    cpu.step(mcu)
+    check cpu.state.pc == 1
+  
+  test "HALT - resume":
+    var
+      mem = newSeq[uint8](128)
+      mcu = newMcu(addr mem)
+      cpu = newCpu(mcu)
+    mem[0] = 0x76'u8
+    mem[1] = 0x00'u8
+    cpu.step(mcu)
+    cpu.step(mcu)
+    cpu.state.ime = 1
+    cpu.state.ie = { iJoypad }
+    cpu.state.`if` = { iJoypad }
+    cpu.step(mcu)
+    check cpu.state.status == {}
+    check cpu.state.pc == 0x60
+
+  test "DI":
+    var
+      mem = newSeq[uint8](8)
+      mcu = newMcu(addr mem)
+      cpu = newCpu(mcu)
+    cpu.state.ime = 1
+    mem[0] = 0xf3'u8
+    mem[1] = 0x00'u8
+    cpu.step(mcu)
+    check cpu.state.ime == 1
+    cpu.step(mcu)
+    check cpu.state.ime == 0
+
+  test "EI":
+    var
+      mem = newSeq[uint8](8)
+      mcu = newMcu(addr mem)
+      cpu = newCpu(mcu)
+    cpu.state.ime = 0
+    mem[0] = 0xfb'u8
+    mem[1] = 0x00'u8
+    cpu.step(mcu)
+    check cpu.state.ime == 0
+    cpu.step(mcu)
+    check cpu.state.ime == 1
 
 
 suite "LR35902 - Jumps/calls":
@@ -216,8 +280,96 @@ suite "LR35902 - 8bit load/store/move instructions":
       oldM = mem.modMem
 
 
-suite "LR35902 - 8bit load/store/move instructions":
-  discard
+suite "LR35902 - 16bit load/store/move instructions":
+  for reg in [(0x01, rBC), (0x11, rDE), (0x21, rHL)]:
+    cpuTest &"LD {reg[1]},0x1234":
+      mem[0] = reg[0].uint8
+      mem[1] = 0x34
+      mem[2] = 0x12
+      let
+        oldS = cpu.modState:
+          s.pc += 3
+          s[reg[1]] = 0x1234
+        oldM = mem.modMem
+  
+  cpuTest "LD SP,0x1234":
+    mem[0] = 0x31
+    mem[1] = 0x34
+    mem[2] = 0x12
+    let
+      oldS = cpu.modState:
+        s.pc += 3
+        s.sp = 0x1234
+      oldM = mem.modMem
+  
+  cpuTest "LD (0x0003),SP":
+    mem[0] = 0x08
+    mem[1] = 0x03
+    mem[2] = 0x00
+    cpu.state.sp = 0x1234'u16
+    let
+      oldS = cpu.modState:
+        s.pc += 3
+        mem[3] = 0x34
+        mem[4] = 0x12
+      oldM = mem.modMem
+  
+  cpuTest "LD SP,HL":
+    mem[0] = 0xf9
+    cpu.state[rHL] = 0x1234'u16
+    let
+      oldS = cpu.modState:
+        s.pc += 1
+        s.sp = 0x1234
+      oldM = mem.modMem
+  
+  cpuTest "LD HL,SP+2 - sp=0x1234":
+    mem[0] = 0xf8
+    mem[1] = 2
+    cpu.state.sp = 0x1234'u16
+    let
+      oldS = cpu.modState:
+        s.pc += 2
+        s[rHL] = 0x1236
+        s.flags = {}
+      oldM = mem.modMem
+  
+  cpuTest "LD HL,SP+2 - sp=0xffff":
+    mem[0] = 0xf8
+    mem[1] = 2
+    cpu.state.sp = 0xffff'u16
+    let
+      oldS = cpu.modState:
+        s.pc += 2
+        s[rHL] = 0x0001'u16
+        s.flags = { fCarry }
+      oldM = mem.modMem
+  
+  for reg in [(0xc5, rBC), (0xd5, rDE), (0xe5, rHL), (0xf5, rAF)]:
+    cpuTest &"PUSH {reg[1]}":
+      mem[0] = reg[0].uint8
+      cpu.state.sp = 8
+      cpu.state[reg[1]] = 0x1234
+      let
+        oldS = cpu.modState:
+          s.pc += 1
+          s.sp = 6
+        oldM = mem.modMem:
+          m[7] = 0x12
+          m[6] = 0x34
+  
+  for reg in [(0xc1, rBC), (0xd1, rDE), (0xe1, rHL), (0xf1, rAF)]:
+    cpuTest &"POP {reg[1]}":
+      mem[0] = reg[0].uint8
+      mem[7] = 0x12
+      mem[6] = 0x34
+      cpu.state.sp = 6
+      let
+        oldS = cpu.modState:
+          s.pc += 1
+          s.sp = 8
+          s[reg[1]] = 0x1234
+        oldM = mem.modMem
 
 
 suite "LR35902 - 16bit arithmetic/logical instructions":
@@ -454,3 +606,11 @@ suite "LR35902 - combined":
     cpu.step(mcu)
     check cpu.state == oldS
     check mem == oldM
+  
+  test "rF == flags":
+    var
+      mem = newSeq[uint8](8)
+      mcu = newMcu(addr mem)
+      cpu = newCpu(mcu)
+    cpu.state.flags = { fCarry, fHalfCarry, fAddSub, fZero }
+    check cpu.state[rF] == 0b11110000

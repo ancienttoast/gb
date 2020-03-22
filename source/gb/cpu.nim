@@ -66,8 +66,11 @@ type
 
   Register = Register8 | Register16
 
-  Sm83StatusFlag = enum
+  Sm83StatusFlag* = enum
     sfHalted
+    sfInterruptWait
+    sfInterruptEnable
+    sfInterruptDisable
 
   Sm83State* = object
     r*:  array[Register8, uint8]
@@ -437,8 +440,11 @@ op opLDSPHL, 2:
 op opLDHLSPps8, 3:
   let
     s8 = cast[int8](cpu.readNext(mem))
-  cpu[rHL] = (cpu.sp.int + s8).uint16
-  # TODO: flags
+    res = cpu.sp.int32 + s8
+  cpu[rHL] = res.uint16
+  cpu.flags -= { fZero, fAddSub }
+  cpu.flags ?= (res > uint16.high.int32, { fCarry })
+  # TODO: fHalfCarry
   result.dissasm = &"LD HL,SP+{s8:#x}"
 
 op opLDu16SP, 5:
@@ -1023,13 +1029,13 @@ op opPreCB, 1:
   instruction.f(opcode, cpu, mem)
 
 op opDI, 1:
-  # TODO: should work after the next instruction?
-  cpu.ime = 0
+  ## Disable interrupt handling (ime = 0) after the next instruction
+  cpu.status += { sfInterruptWait, sfInterruptDisable }
   result.dissasm = "DI"
 
 op opEI, 1:
-  # TODO: should work after the next instruction?
-  cpu.ime = 1
+  ## Enable interrupt handling (ime = 1) after the next instruction
+  cpu.status += { sfInterruptWait, sfInterruptEnable }
   result.dissasm = "EI"
 
 const
@@ -1054,14 +1060,15 @@ const
 
 
 func step*(self: var Sm83, mem: var Mcu): int {.discardable.} =
-  if self.state.ime == 1:
-    for interrupt in Interrupt:
-      if interrupt in self.state.ie and interrupt in self.state.`if`:
-        self.state.ime = 0
-        self.state.`if` -= { interrupt }
-        self.state.status -= { sfHalted }
-        opCall(self.state, mem, InterruptHandler[interrupt])
-        return
+  if self.state.`if` != {}:
+    self.state.status -= { sfHalted }
+    if self.state.ime == 1:
+      for interrupt in Interrupt:
+        if interrupt in self.state.ie and interrupt in self.state.`if`:
+          self.state.ime = 0
+          self.state.`if` -= { interrupt }
+          opCall(self.state, mem, InterruptHandler[interrupt])
+          return
 
   if sfHalted in self.state.status:
     return
@@ -1073,4 +1080,16 @@ func step*(self: var Sm83, mem: var Mcu): int {.discardable.} =
   let
     (cycles, dissasm) = instruction.f(opcode, self.state, mem)
   #debugEcho &"{position:#06x}  {dissasm:<20} ({opcode:#04x}) {self.state}"
+
+  if sfInterruptWait notin self.state.status:
+    if sfInterruptEnable in self.state.status:
+      self.state.ime = 1
+      self.state.status -= { sfInterruptEnable }
+    
+    if sfInterruptDisable in self.state.status:
+      self.state.ime = 0
+      self.state.status -= { sfInterruptDisable }
+  else:
+    self.state.status -= { sfInterruptWait }
+
   cycles

@@ -246,7 +246,7 @@ proc renderTiles*(self: Display, b: range[0..2]): Image[ColorRGBU] =
         tileImage = self.bgTile(b*128 + (x + y*16))
       result.blit(tileImage, x*8, y*8)
 
-proc renderBackground*(self: Display): Image[ColorRGBU] =
+proc renderBackground*(self: Display, drawGrid = true): Image[ColorRGBU] =
   let
     mapAddress = self.state.io.bgMapAddress()
   result = initImage[ColorRGBU](256, 256)
@@ -263,10 +263,11 @@ proc renderBackground*(self: Display): Image[ColorRGBU] =
   result.drawLine(max(0, min0[0]), max(0, min0[1]), min(255, min0[0]), min(255, max0[1]), [255'u8, 0, 0].ColorRGBU)
   result.drawLine(max(0, min0[0]), max(0, min0[1]), min(255, max0[0]), min(255, min0[1]), [255'u8, 0, 0].ColorRGBU)
 
-  for x in 1..31:
-    result.drawLine(x*8, 0, x*8, result.height - 1, [0'u8, 255, 0].ColorRGBU)
-  for y in 1..31:
-    result.drawLine(0, y*8, result.width - 1, y*8, [0'u8, 255, 0].ColorRGBU)
+  if drawGrid:
+    for x in 1..31:
+      result.drawLine(x*8, 0, x*8, result.height - 1, [0'u8, 255, 0].ColorRGBU)
+    for y in 1..31:
+      result.drawLine(0, y*8, result.width - 1, y*8, [0'u8, 255, 0].ColorRGBU)
 
 
 proc renderSprites*(self: Display): Image[ColorRGBU] =

@@ -9,9 +9,9 @@ import
 const
   BootRom = "123/[BIOS] Nintendo Game Boy Boot ROM (World).gb"
   #Rom = "123/gb-test-roms-master/cpu_instrs/individual/01-special.gb"
-  #Rom = "123/Tetris (World) (Rev A).gb"
+  Rom = "123/Tetris (World) (Rev A).gb"
   #Rom = "123/mooneye-gb-master/tests/build/acceptance/timer/div_write.gb"
-  Rom = "123/bgbw64/bgbtest.gb"
+  #Rom = "123/bgbw64/bgbtest.gb"
 
 
 
@@ -208,7 +208,7 @@ proc main() =
         if igBeginTabBar("display"):
           if igBeginTabItem("BG map"):
             let
-              image = gameboy.display.renderBackground()
+              image = gameboy.display.renderBackground(drawGrid = false)
             bgTexture.upload(image)
             igImage(cast[pointer](bgTexture.texture), ImVec2(x: bgTexture.width.float32 * 2, y: bgTexture.height.float32 * 2))
             igEndTabItem()
