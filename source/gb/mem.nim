@@ -10,7 +10,7 @@
   0xc000-0xcfff Work RAM Bank 0
   0xd000-0xdfff Work RAM Bank n (DMG: 1, CGB: switchable)
   0xe000-0xfdff Echo RAM (mirror of 0xc000~0xddff, reserved)
-  0xfe00-0xde9f Object Attribute Memory (OAM)
+  0xfe00-0xfe9f Object Attribute Memory (OAM)
   0xfea0-0xfeff Not Usable
   0xff00-0xff7f I/O Registers
       0xff04-0xff07 `Timer and Divider Registers<timer.html>`_

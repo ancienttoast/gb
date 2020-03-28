@@ -8,8 +8,8 @@ import
 
 const
   BootRom = "123/[BIOS] Nintendo Game Boy Boot ROM (World).gb"
-  #Rom = "123/gb-test-roms-master/cpu_instrs/individual/01-special.gb"
-  Rom = "123/Tetris (World) (Rev A).gb"
+  Rom = "123/gb-test-roms-master/cpu_instrs/individual/03-op sp,hl.gb"
+  #Rom = "123/Tetris (World) (Rev A).gb"
   #Rom = "123/mooneye-gb-master/tests/build/acceptance/timer/div_write.gb"
   #Rom = "123/bgbw64/bgbtest.gb"
 
@@ -123,6 +123,7 @@ proc main() =
     isRunning = true
     showBgMap = true
     showSpriteMap = true
+    showOam = true
     showControls = true
     showCpu = true
     showDemo = false
@@ -195,6 +196,7 @@ proc main() =
         igCheckbox("BG Window", addr showBgMap)
         igCheckbox("Sprite Window", addr showSpriteMap)
         igCheckbox("Cpu window", addr showCpu)
+        igCheckbox("OAM", addr showOam)
         igSeparator()
         igCheckbox("Demo", addr showDemo)
         igEndMenu()
@@ -236,35 +238,36 @@ proc main() =
     if showCpu:
       cpuWindow(gameboy.cpu.state)
     
-    let
-      oams = gameboy.display.state.oam
-    igSetNextWindowPos(ImVec2(x: 693, y: 24), FirstUseEver)
-    igSetNextWindowSize(ImVec2(x: 521, y: 390), FirstUseEver)
-    igBegin("OAM")
-    igColumns(8, "oam", true)
-    var
-      col = 0
-    for i, oam in oams:
+    if showOam:
       let
-        tile = gameboy.display.bgTile(oam.tile.int)
-      oamTextures[i].upload(tile)
-      igImage(cast[pointer](oamTextures[i].texture), ImVec2(x: oamTextures[i].width.float32 * 2, y: oamTextures[i].height.float32 * 2))
-      igSameLine()
-      igBeginGroup()
-      igText(&"{oam.y:#04x}")
-      igText(&"{oam.x:#04x}")
-      igText(&"{oam.tile:#04x}")
-      igText(&"{oam.flags:#04x}")
-      igEndGroup()
-
-      igNextColumn()
-
-      col += 1
-      if col >= 8 and i < 39:
+        oams = gameboy.display.state.oam
+      igSetNextWindowPos(ImVec2(x: 693, y: 24), FirstUseEver)
+      igSetNextWindowSize(ImVec2(x: 521, y: 390), FirstUseEver)
+      igBegin("OAM")
+      igColumns(8, "oam", true)
+      var
         col = 0
-        igSeparator()
+      for i, oam in oams:
+        let
+          tile = gameboy.display.bgTile(oam.tile.int)
+        oamTextures[i].upload(tile)
+        igImage(cast[pointer](oamTextures[i].texture), ImVec2(x: oamTextures[i].width.float32 * 2, y: oamTextures[i].height.float32 * 2))
+        igSameLine()
+        igBeginGroup()
+        igText(&"{oam.y:#04x}")
+        igText(&"{oam.x:#04x}")
+        igText(&"{oam.tile:#04x}")
+        igText(&"{oam.flags:#04x}")
+        igEndGroup()
 
-    igEnd()
+        igNextColumn()
+
+        col += 1
+        if col >= 8 and i < 39:
+          col = 0
+          igSeparator()
+
+      igEnd()
 
     if showControls:
       igSetNextWindowPos(ImVec2(x: 4, y: 24), FirstUseEver)

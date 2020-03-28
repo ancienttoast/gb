@@ -468,6 +468,28 @@ suite "LR35902 - 8bit arithmetic/logical instructions":
         s.flags = { fAddSub, fHalfCarry }
         s[rA] = 0b01100110
       oldM = mem.modMem
+  
+  cpuTest "SUB 8 - a=8":
+    mem[0] = 0xd6'u8
+    mem[1] = 8
+    cpu.state[rA] = 8'u8
+    let
+      oldS = cpu.modState:
+        s.pc += 2
+        s.flags = { fZero, fAddSub }
+        s[rA] = 0
+      oldM = mem.modMem
+  
+  cpuTest "SUB 8 - a=5":
+    mem[0] = 0xd6'u8
+    mem[1] = 8
+    cpu.state[rA] = 5'u8
+    let
+      oldS = cpu.modState:
+        s.pc += 2
+        s.flags = { fAddSub, fCarry }
+        s[rA] = 0xfd
+      oldM = mem.modMem
 
 
 suite "LR35902 - 8bit rotations/shifts and bit instructions":

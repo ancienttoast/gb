@@ -45,7 +45,8 @@
 
 ]##
 import
-  mem, bitops, imageman
+  std/bitops, imageman,
+  mem, cpu
 
 
 
@@ -182,14 +183,14 @@ proc step*(self: Display): bool {.discardable.} =
     result = true
   
   if self.state.io.ly == 144:
-    self.mcu.write(0xff0f, self.mcu.read(0xff0f) or 0b00000001)
+    self.mcu.raiseInterrupt(iVBlank)
 
 proc pushHandler*(mcu: Mcu, self: Display) =
   let
     dmaHandler = MemHandler(
       read: proc(address: MemAddress): uint8 = 0,
       write: proc(address: MemAddress, value: uint8) =
-        # TODO: this should 160 cycles
+        # TODO: this should take 160 cycles
         let
           source = value.uint16 shl 8
         for i in 0.uint16 ..< DisplayOam.sizeof.uint16:
@@ -207,6 +208,8 @@ proc newDisplay*(mcu: Mcu): Display =
     mcu: mcu
   )
   mcu.pushHandler(result)
+
+
 
 
 

@@ -105,9 +105,9 @@ proc newCpu*(mcu: Mcu): Sm83 =
 
 proc raiseInterrupt*(mcu: Mcu, interrupt: Interrupt) =
   var
-    table = mcu.read(IfAddress)
+    table = mcu[IfAddress]
   setBit(table, interrupt.ord)
-  mcu.write(IfAddress, table)
+  mcu[IfAddress] = table
 
 
 template `[]`*(self: Sm83State, register: Register8): uint8 =
@@ -184,6 +184,7 @@ op opERR, 1:
   raise newException(Exception, "Not implemented opcode: " & opcode.int.toHex(2))
 
 op opINV, 1:
+  discard
   result.dissasm = "Invalid opcode (" & opcode.int.toHex(2) & ")"
 
 
@@ -578,11 +579,11 @@ op opCPu8, 2:
   result.dissasm = &"CP {u8:#x}"
 
 func opSub(cpu: var Sm83State, value: uint8) =
+  # TODO: cpu.f.incl(fHalfCarry)
+  cpu.flags ?= (cpu[rA] < value, { fCarry })
   cpu[rA] = cpu[rA] - value
   cpu.flags ?= (cpu[rA] == 0, { fZero })
   cpu.flags += { fAddSub }
-  # TODO: cpu.f.incl(fHalfCarry)
-  cpu.flags ?= (cpu[rA] < cpu[rA], { fCarry })
 
 op opSUBr8, 1:
   let
@@ -602,7 +603,7 @@ op opSUBd8, 2:
   let
     d8 = cpu.readNext(mem)
   opSub(cpu, d8)
-  result.dissasm = "SUB {d8}"
+  result.dissasm = &"SUB {d8}"
 
 func opAdd(cpu: var Sm83State, value: uint8) =
   cpu[rA] = cpu[rA] + value
@@ -696,7 +697,21 @@ op opCCF, 1:
   cpu.flags -= { fAddSub, fHalfCarry }
   cpu.flags ?= (fCarry notin cpu.flags, { fCarry })
   result.dissasm = &"CCF"
-  
+
+func opAdc(cpu: var Sm83State, value: uint8) =
+  let
+    carry = if fCarry in cpu.flags: 1'u8 else: 0
+  cpu.flags ?= (cpu[rA].int + value.int > 255, { fCarry })
+  # TODO: cpu.f.incl(fHalfCarry)
+  cpu[rA] = cpu[rA] + value + carry
+  cpu.flags ?= (cpu[rA] == 0, { fZero })
+  cpu.flags -= { fAddSub }
+
+op opADCd8, 1:
+  let
+    n = cpu.readNext(mem)
+  opAdc(cpu, n)
+  result.dissasm = &"ADC {n}"
 
 
 #[ 16bit arithmetic/logical instructions ]#
@@ -735,6 +750,16 @@ op opADDHLr16, 2:
 op opADDHLSP, 2:
   opAddHl(cpu, cpu.sp)
   result.dissasm = "ADD HL,SP"
+
+op opADDSPs8, 2:
+  let
+    s8 = cast[int8](cpu.readNext(mem))
+    r = cpu.sp.int + s8.int
+  cpu.flags ?= (r > uint16.high.int or r < 0, { fCarry })
+  # TODO: half carry flag
+  cpu.sp = r.uint16
+  cpu.flags -= { fZero, fAddSub }
+  result.dissasm = &"ADD SP,{s8}"
 
 
 #[ 8bit rotations/shifts and bit instructions ]#
@@ -1052,9 +1077,9 @@ const
     opSUBr8,   opSUBr8,    opSUBr8,   opSUBr8,   opSUBr8,     opSUBr8,   opSUBHL,  opSUBA,   opERR,       opERR,      opERR,     opERR,    opERR,       opERR,     opERR,    opERR,
     opANDr8,   opANDr8,    opANDr8,   opANDr8,   opANDr8,     opANDr8,   opANDpHL, opANDA,   opXORr8,     opXORr8,    opXORr8,   opXORr8,  opXORr8,     opXORr8,   opXORpHL, opXORA,
     opORr8,    opORr8,     opORr8,    opORr8,    opORr8,      opORr8,    opORpHL,  opORA,    opCPr8,      opCPr8,     opCPr8,    opCPr8,   opCPr8,      opCPr8,    opCPpHL,  opCPA,
-    opRETcc,   opPOPr16,   opJPccu16, opJPu16,   opCALLccu16, opPUSHr16, opADDAd8, opRST,    opRETcc,     opRET,      opJPccu16, opPreCB,  opCALLccu16, opCALLu16, opERR,    opRST,
+    opRETcc,   opPOPr16,   opJPccu16, opJPu16,   opCALLccu16, opPUSHr16, opADDAd8, opRST,    opRETcc,     opRET,      opJPccu16, opPreCB,  opCALLccu16, opCALLu16, opADCd8,  opRST,
     opRETcc,   opPOPr16,   opJPccu16, opINV,     opCALLccu16, opPUSHr16, opSUBd8,  opRST,    opRETcc,     opRETI,     opJPccu16, opINV,    opCALLccu16, opINV,     opERR,    opRST,
-    opLDHu8A,  opPOPr16,   opLDpCA,   opINV,     opINV,       opPUSHr16, opANDd8,  opRST,    opERR,       opJPHL,     opLDu16A,  opINV,    opINV,       opINV,     opXORd8,  opRST,
+    opLDHu8A,  opPOPr16,   opLDpCA,   opINV,     opINV,       opPUSHr16, opANDd8,  opRST,    opADDSPs8,   opJPHL,     opLDu16A,  opINV,    opINV,       opINV,     opXORd8,  opRST,
     opLDHAu8,  opPOPr16,   opLDApC,   opDI,      opINV,       opPUSHr16, opORd8,   opRST,    opLDHLSPps8, opLDSPHL,   opLDAu16,  opEI,     opINV,       opINV,     opCPu8,   opRST
   ]
 
@@ -1068,10 +1093,10 @@ func step*(self: var Sm83, mem: var Mcu): int {.discardable.} =
           self.state.ime = 0
           self.state.`if` -= { interrupt }
           opCall(self.state, mem, InterruptHandler[interrupt])
-          return
+          return 5
 
   if sfHalted in self.state.status:
-    return
+    return 1
 
   let
     position = self.state.pc
@@ -1079,7 +1104,8 @@ func step*(self: var Sm83, mem: var Mcu): int {.discardable.} =
     instruction = OpcodeTable[opcode.int]
   let
     (cycles, dissasm) = instruction.f(opcode, self.state, mem)
-  #debugEcho &"{position:#06x}  {dissasm:<20} ({opcode:#04x}) {self.state}"
+  #if self.state.pc > 0x0100'u16:
+  #  debugEcho &"{position:#06x}  {dissasm:<20} ({opcode:#04x}) {self.state}"
 
   if sfInterruptWait notin self.state.status:
     if sfInterruptEnable in self.state.status:
