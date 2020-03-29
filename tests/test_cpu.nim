@@ -331,7 +331,7 @@ suite "LR35902 - 16bit load/store/move instructions":
       oldS = cpu.modState:
         s.pc += 2
         s[rHL] = 0x1236
-        s.flags = {}
+        s.flags = { fHalfCarry }
       oldM = mem.modMem
   
   cpuTest "LD HL,SP+2 - sp=0xffff":
@@ -342,7 +342,7 @@ suite "LR35902 - 16bit load/store/move instructions":
       oldS = cpu.modState:
         s.pc += 2
         s[rHL] = 0x0001'u16
-        s.flags = { fCarry }
+        s.flags = { fCarry, fHalfCarry }
       oldM = mem.modMem
   
   for reg in [(0xc5, rBC), (0xd5, rDE), (0xe5, rHL), (0xf5, rAF)]:

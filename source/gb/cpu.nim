@@ -179,6 +179,9 @@ template nn(cpu: var Sm83State, mem: var Mcu): uint16 =
 template cc(opcode: uint8): JumpCondition =
   ((opcode and 0b00011000) shr 3).JumpCondition
 
+template bit(opcode: uint8): range[0..7] =
+  (opcode and 0b00111000) shr 3
+
 
 #[ Misc ]#
 op opERR, 1:
@@ -767,30 +770,6 @@ op opADDSPs8, 2:
 
 
 #[ 8bit rotations/shifts and bit instructions ]#
-func opBit(cpu: var Sm83State, value: uint8, bit: range[0..7]) =
-  cpu.flags ?= (not testBit(value, bit.int), { fZero })
-  cpu.flags -= { fAddSub }
-  cpu.flags += { fHalfCarry }
-
-op opBITr8, 2:
-  let
-    bit = (opcode and 0b01110000) shr 4
-    r8 = ((opcode and 0b00000111) + 2).Register8
-  opBit(cpu, cpu[r8], bit)
-  result.dissasm = &"BIT {bit},{r8}"
-
-op opBITpHL, 4:
-  let
-    bit = (opcode and 0b01110000) shr 4
-  opBit(cpu, mem[cpu[rHL]], bit)
-  result.dissasm = &"BIT {bit},(HL)"
-
-op opBITA, 2:
-  let
-    bit = (opcode and 0b01110000) shr 4
-  opBit(cpu, cpu[rA], bit)
-  result.dissasm = &"BIT {bit},A"
-
 func opRlc(cpu: var Sm83State, value: uint8): uint8 =
   let
     carry = (value and 0b10000000) shr 7
@@ -859,28 +838,52 @@ op opSLAA, 2:
   cpu[rA] = opSla(cpu, cpu[rA])
   result.dissasm = &"SLA A"
 
+func opBit(cpu: var Sm83State, bit: range[0..7], value: uint8) =
+  cpu.flags ?= (not testBit(value, bit.int), { fZero })
+  cpu.flags -= { fAddSub }
+  cpu.flags += { fHalfCarry }
+
+op opBITr8, 2:
+  let
+    bit = opcode.bit
+    r8 = ((opcode and 0b00000111) + 2).Register8
+  opBit(cpu, bit, cpu[r8])
+  result.dissasm = &"BIT {bit},{r8}"
+
+op opBITpHL, 4:
+  let
+    bit = opcode.bit
+  opBit(cpu, bit, mem[cpu[rHL]])
+  result.dissasm = &"BIT {bit},(HL)"
+
+op opBITA, 2:
+  let
+    bit = opcode.bit
+  opBit(cpu, bit, cpu[rA])
+  result.dissasm = &"BIT {bit},A"
+
 func opSet(bit: range[0..7], value: uint8): uint8 =
   result = value
   setBit[uint8](result, bit)
 
 op opSETbr8, 2:
   let
-    b = ((opcode and 0b00110000) shr 4) + ((opcode and 0b00001000) shr 3)
+    bit = opcode.bit
     r8 = ((opcode and 0b00000111) + 2).Register8
-  cpu[r8] = opSet(b, cpu[r8])
-  result.dissasm = &"SET {b},{r8}"
+  cpu[r8] = opSet(bit, cpu[r8])
+  result.dissasm = &"SET {bit},{r8}"
 
 op opSETbpHL, 2:
   let
-    b = ((opcode and 0b00110000) shr 4) + ((opcode and 0b00001000) shr 3)
-  mem[cpu[rHL]] = opSet(b, mem[cpu[rHL]])
-  result.dissasm = &"SET {b},(HL)"
+    bit = opcode.bit
+  mem[cpu[rHL]] = opSet(bit, mem[cpu[rHL]])
+  result.dissasm = &"SET {bit},(HL)"
 
 op opSETbA, 2:
   let
-    b = ((opcode and 0b00110000) shr 4) + ((opcode and 0b00001000) shr 3)
-  cpu[rA] = opSet(b, cpu[rA])
-  result.dissasm = &"SET {b},A"
+    bit = opcode.bit
+  cpu[rA] = opSet(bit, cpu[rA])
+  result.dissasm = &"SET {bit},A"
 
 func opRes(bit: range[0..7], value: uint8): uint8 =
   result = value
@@ -888,22 +891,22 @@ func opRes(bit: range[0..7], value: uint8): uint8 =
 
 op opRESbr8, 2:
   let
-    b = ((opcode and 0b00110000) shr 4) + ((opcode and 0b00001000) shr 3)
+    bit = opcode.bit
     r8 = ((opcode and 0b00000111) + 2).Register8
-  cpu[r8] = opRes(b, cpu[r8])
-  result.dissasm = &"RES {b},{r8}"
+  cpu[r8] = opRes(bit, cpu[r8])
+  result.dissasm = &"RES {bit},{r8}"
 
 op opRESbpHL, 2:
   let
-    b = ((opcode and 0b00110000) shr 4) + ((opcode and 0b00001000) shr 3)
-  mem[cpu[rHL]] = opRes(b, mem[cpu[rHL]])
-  result.dissasm = &"RES {b},(HL)"
+    bit = opcode.bit
+  mem[cpu[rHL]] = opRes(bit, mem[cpu[rHL]])
+  result.dissasm = &"RES {bit},(HL)"
 
 op opRESbA, 2:
   let
-    b = ((opcode and 0b00110000) shr 4) + ((opcode and 0b00001000) shr 3)
-  cpu[rA] = opRes(b, cpu[rA])
-  result.dissasm = &"RES {b},A"
+    bit = opcode.bit
+  cpu[rA] = opRes(bit, cpu[rA])
+  result.dissasm = &"RES {bit},A"
 
 func opSwap(cpu: var Sm83State, value: uint8): uint8 =
   result = ((value and 0x0f) shl 4) or ((value and 0xf0) shr 4)
