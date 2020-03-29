@@ -7,11 +7,11 @@ import
 
 
 const
-  BootRom = "123/[BIOS] Nintendo Game Boy Boot ROM (World).gb"
-  Rom = "123/gb-test-roms-master/cpu_instrs/individual/03-op sp,hl.gb"
+  #BootRom = "123/[BIOS] Nintendo Game Boy Boot ROM (World).gb"
+  BootRom = ""
+  #Rom = "123/gb-test-roms-master/cpu_instrs/individual/06-ld r,r.gb"
   #Rom = "123/Tetris (World) (Rev A).gb"
-  #Rom = "123/mooneye-gb-master/tests/build/acceptance/timer/div_write.gb"
-  #Rom = "123/bgbw64/bgbtest.gb"
+  Rom = "123/bgbw64/bgbtest.gb"
 
 
 
