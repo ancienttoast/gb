@@ -4,6 +4,7 @@
 
   * `https://robdor.com/2016/08/10/gameboy-emulator-half-carry-flag/`_
   * `https://pastraiser.com/cpu/gameboy/gameboy_opcodes.htm`_
+  * `http://forums.nesdev.com/viewtopic.php?f=20&t=15944#p196282`_
 
 ]##
 import
@@ -391,14 +392,14 @@ op opLDApC, 2:
   result.dissasm = "LD A,(C)"
 
 op opLDHAu8, 3:
-  ## Put A into memory at address 0xff00 + u8
+  ## Put memory value at address 0xff00 + u8 into A
   let
     u8 = cpu.readNext(mem)
   cpu[rA] = mem[0xff00'u16 + u8.uint16]
   result.dissasm = &"LDH A,{u8:#x}"
 
 op opLDHu8A, 3:
-  ## Put memory value at address 0xff00 + u8 into A
+  ## Put A into memory at address 0xff00 + u8
   let
     u8 = cpu.readNext(mem)
   mem[0xff00'u16 + u8.uint16] = cpu[rA]
@@ -438,14 +439,17 @@ op opLDSPHL, 2:
   cpu.sp = cpu[rHL]
   result.dissasm = "LD SP,HL"
 
+func hasHalfCarry(a, b: int): bool =
+  (((a and 0xf0) + (b and 0xf0)) and 0x10) == 0x10
+
 op opLDHLSPps8, 3:
   let
     s8 = cast[int8](cpu.readNext(mem))
-    res = cpu.sp.int32 + s8
+    res = cpu.sp.int + s8
   cpu[rHL] = res.uint16
   cpu.flags -= { fZero, fAddSub }
-  cpu.flags ?= (res > uint16.high.int32, { fCarry })
-  # TODO: fHalfCarry
+  cpu.flags ?= (res > uint16.high.int or res < 0, { fCarry })
+  cpu.flags ?= (hasHalfCarry(cpu.sp.int, s8), { fHalfCarry })
   result.dissasm = &"LD HL,SP+{s8:#x}"
 
 op opLDu16SP, 5:
@@ -942,13 +946,16 @@ op opRRCA, 2: # TOOD: Non CB version size 1
   cpu[rA] = opRrc(cpu, cpu[rA])
   result.dissasm = &"RRC A"
 
-func opRr(cpu: var Sm83State, value: uint8): uint8 =
+func opRr(cpu: var Sm83State, value: uint8, hasZero = true): uint8 =
   let
     carry = value and 0b00000001
   result = value shr 1
   if fCarry in cpu.flags:
-    result = result or 1
-  cpu.flags ?= (result == 0, { fZero })
+    result = result or 0b10000000
+  if hasZero:
+    cpu.flags ?= (result == 0, { fZero })
+  else:
+    cpu.flags -= { fZero }
   cpu.flags -= { fAddSub, fHalfCarry }
   cpu.flags ?= (carry == 1, { fCarry })
 
@@ -963,7 +970,7 @@ op opRRpHL, 4:
   result.dissasm = &"RR (HL)"
 
 op opRRA, 2: # TOOD: Non CB version size 1
-  cpu[rA] = opRr(cpu, cpu[rA])
+  cpu[rA] = opRr(cpu, cpu[rA], false)
   result.dissasm = &"RR A"
 
 func opSra(cpu: var Sm83State, value: uint8): uint8 =
