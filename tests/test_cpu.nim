@@ -411,7 +411,7 @@ suite "LR35902 - 8bit arithmetic/logical instructions":
     let
       oldS = cpu.modState:
         s.pc += 1
-        s.flags = { fAddSub }
+        s.flags = { fHalfCarry, fAddSub }
         s[rB] = 255
       oldM = mem.modMem
   
@@ -487,7 +487,7 @@ suite "LR35902 - 8bit arithmetic/logical instructions":
     let
       oldS = cpu.modState:
         s.pc += 2
-        s.flags = { fAddSub, fCarry }
+        s.flags = { fAddSub, fCarry, fHalfCarry }
         s[rA] = 0xfd
       oldM = mem.modMem
 

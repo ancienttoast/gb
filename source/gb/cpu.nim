@@ -3,6 +3,7 @@
   Sharp LR35902
 
   * `https://robdor.com/2016/08/10/gameboy-emulator-half-carry-flag/`_
+  * `https://stackoverflow.com/a/57981912`_
   * `https://pastraiser.com/cpu/gameboy/gameboy_opcodes.htm`_
   * `http://forums.nesdev.com/viewtopic.php?f=20&t=15944#p196282`_
 
@@ -187,10 +188,10 @@ template hasHalfCarryAdd(a, b: uint8): bool =
   (((a and 0x0f) + (b and 0x0f)) and 0x10) == 0x10
 
 template hasHalfCarrySub(a, b: uint8): bool =
-  (a.int and 0x0f) - (b.int and 0x0f) < 0
+  (a and 0x0f) < (b and 0x0f)
 
-template hasHalfCarryAdd(a, b: uint16): bool =
-  (((a and 0x00ff) + (b and 0x00ff)) and 0x0100) == 0x0100
+
+template highUint8(u: uint16): uint8 = ((u and 0xff00) shr 8).uint8
 
 
 #[ Misc ]#
@@ -529,7 +530,7 @@ func opInc(cpu: var Sm83State, mem: var Mcu, value: uint8): uint8 =
   result = value + 1
   cpu.flags ?= (result == 0, { fZero })
   cpu.flags -= { fAddSub }
-  # TODO: half-carry flag
+  cpu.flags ?= (hasHalfCarryAdd(value, 1), { fHalfCarry })
 
 op opINCr8, 1:
   let
@@ -549,7 +550,7 @@ func opDec(cpu: var Sm83State, mem: var Mcu, value: uint8): uint8 =
   result = value - 1
   cpu.flags ?= (result == 0, { fZero })
   cpu.flags += { fAddSub }
-  # TODO: half-carry flag
+  cpu.flags ?= (hasHalfCarrySub(value, 1), { fHalfCarry })
 
 op opDECr8, 1:
   let
@@ -795,7 +796,7 @@ op opDECSP, 2:
 
 func opAddHl(cpu: var Sm83State, value: uint16) =
   cpu.flags ?= (cpu[rHL].int + value.int > uint16.high.int, { fCarry })
-  cpu.flags ?= (hasHalfCarryAdd(cpu[rHL], value), { fHalfCarry })
+  cpu.flags ?= (hasHalfCarryAdd(cpu[rHL].highUint8, value.highUint8), { fHalfCarry })
   cpu[rHL] = cpu[rHL] + value
   cpu.flags -= { fAddSub }
 
@@ -813,8 +814,12 @@ op opADDSPs8, 2:
   let
     s8 = cast[int8](cpu.readNext(mem))
     r = cpu.sp.int + s8.int
-  cpu.flags ?= (r > uint16.high.int or r < 0, { fCarry })
-  # TODO: half carry flag
+    p = (cpu.sp and 0x00ff).uint8
+  cpu.flags ?= ( p.int + s8.int > uint8.high.int or p.int + s8.int < 0, { fCarry })
+  if s8 >= 0:
+    cpu.flags ?= (hasHalfCarryAdd(p, s8.uint8), { fHalfCarry })
+  else:
+    cpu.flags ?= (hasHalfCarrySub(p, s8.uint8), { fHalfCarry })
   cpu.sp = r.uint16
   cpu.flags -= { fZero, fAddSub }
   result.dissasm = &"ADD SP,{s8}"
@@ -839,7 +844,12 @@ op opRLCpHL, 4:
   mem[cpu[rHL]] = opRlc(cpu, mem[cpu[rHL]])
   result.dissasm = &"RLC (HL)"
 
-op opRLCA, 2: # TOOD: Non CB version size 1
+op opRLCA, 1:
+  cpu[rA] = opRlc(cpu, cpu[rA])
+  cpu.flags -= { fZero }
+  result.dissasm = &"RLC A"
+
+op opCBRLCA, 2:
   cpu[rA] = opRlc(cpu, cpu[rA])
   result.dissasm = &"RLC A"
 
@@ -863,7 +873,12 @@ op opRLpHL, 4:
   mem[cpu[rHL]] = opRl(cpu, mem[cpu[rHL]])
   result.dissasm = &"RL (HL)"
 
-op opRLA, 2: # TOOD: Non CB version size 1
+op opRLA, 1:
+  cpu[rA] = opRl(cpu, cpu[rA])
+  cpu.flags -= { fZero }
+  result.dissasm = &"RL A"
+
+op opCBRLA, 2:
   cpu[rA] = opRl(cpu, cpu[rA])
   result.dissasm = &"RL A"
 
@@ -980,11 +995,13 @@ op opSWAPA, 2:
 
 func opRrc(cpu: var Sm83State, value: uint8): uint8 =
   let
-    carry = value and 0b00000001
-  result = (value shr 1) or carry
+    carry = (value and 0b00000001) == 1
+  result = value shr 1
+  if carry:
+    result = result or 0b10000000
   cpu.flags ?= (result == 0, { fZero })
   cpu.flags -= { fAddSub, fHalfCarry }
-  cpu.flags ?= (carry == 1, { fCarry })
+  cpu.flags ?= (carry, { fCarry })
 
 op opRRCr8, 2:
   let
@@ -996,22 +1013,24 @@ op opRRCpHL, 4:
   mem[cpu[rHL]] = opRrc(cpu, mem[cpu[rHL]])
   result.dissasm = &"RRC (HL)"
 
-op opRRCA, 2: # TOOD: Non CB version size 1
+op opRRCA, 1:
+  cpu[rA] = opRrc(cpu, cpu[rA])
+  cpu.flags -= { fZero }
+  result.dissasm = &"RRC A"
+
+op opCBRRCA, 2:
   cpu[rA] = opRrc(cpu, cpu[rA])
   result.dissasm = &"RRC A"
 
-func opRr(cpu: var Sm83State, value: uint8, hasZero = true): uint8 =
+func opRr(cpu: var Sm83State, value: uint8): uint8 =
   let
-    carry = value and 0b00000001
+    carry = (value and 0b00000001) == 1
   result = value shr 1
   if fCarry in cpu.flags:
     result = result or 0b10000000
-  if hasZero:
-    cpu.flags ?= (result == 0, { fZero })
-  else:
-    cpu.flags -= { fZero }
+  cpu.flags ?= (result == 0, { fZero })
   cpu.flags -= { fAddSub, fHalfCarry }
-  cpu.flags ?= (carry == 1, { fCarry })
+  cpu.flags ?= (carry, { fCarry })
 
 op opRRr8, 2:
   let
@@ -1023,8 +1042,13 @@ op opRRpHL, 4:
   mem[cpu[rHL]] = opRr(cpu, mem[cpu[rHL]])
   result.dissasm = &"RR (HL)"
 
-op opRRA, 2: # TOOD: Non CB version size 1
-  cpu[rA] = opRr(cpu, cpu[rA], false)
+op opRRA, 1:
+  cpu[rA] = opRr(cpu, cpu[rA])
+  cpu.flags -= { fZero }
+  result.dissasm = &"RR A"
+
+op opCBRRA, 2:
+  cpu[rA] = opRr(cpu, cpu[rA])
   result.dissasm = &"RR A"
 
 func opSra(cpu: var Sm83State, value: uint8): uint8 =
@@ -1075,8 +1099,8 @@ op opSRLA, 2:
 
 const
   PrefixCbTable: array[256, InstructionDefinition] = [
-    opRLCr8,   opRLCr8,   opRLCr8,   opRLCr8,   opRLCr8,   opRLCr8,   opRLCpHL,  opRLCA,    opRRCr8,   opRRCr8,   opRRCr8,   opRRCr8,   opRRCr8,   opRRCr8,   opRRCpHL,  opRRCA,
-    opRLr8,    opRLr8,    opRLr8,    opRLr8,    opRLr8,    opRLr8,    opRLpHL,   opRLA,     opRRr8,    opRRr8,    opRRr8,    opRRr8,    opRRr8,    opRRr8,    opRRpHL,   opRRA,
+    opRLCr8,   opRLCr8,   opRLCr8,   opRLCr8,   opRLCr8,   opRLCr8,   opRLCpHL,  opCBRLCA,  opRRCr8,   opRRCr8,   opRRCr8,   opRRCr8,   opRRCr8,   opRRCr8,   opRRCpHL,  opCBRRCA,
+    opRLr8,    opRLr8,    opRLr8,    opRLr8,    opRLr8,    opRLr8,    opRLpHL,   opCBRLA,   opRRr8,    opRRr8,    opRRr8,    opRRr8,    opRRr8,    opRRr8,    opRRpHL,   opCBRRA,
     opSLAr8,   opSLAr8,   opSLAr8,   opSLAr8,   opSLAr8,   opSLAr8,   opSLApHL,  opSLAA,    opSRAr8,   opSRAr8,   opSRAr8,   opSRAr8,   opSRAr8,   opSRAr8,   opSRApHL,  opSRAA,
     opSWAPr8,  opSWAPr8,  opSWAPr8,  opSWAPr8,  opSWAPr8,  opSWAPr8,  opSWAPpHL, opSWAPA,   opSRLr8,   opSRLr8,   opSRLr8,   opSRLr8,   opSRLr8,   opSRLr8,   opSRLpHL,  opSRLA,
     opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITpHL,  opBITA,    opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITr8,   opBITpHL,  opBITA,
