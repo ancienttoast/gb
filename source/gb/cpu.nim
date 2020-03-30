@@ -183,6 +183,16 @@ template bit(opcode: uint8): range[0..7] =
   (opcode and 0b00111000) shr 3
 
 
+template hasHalfCarryAdd(a, b: uint8): bool =
+  (((a and 0x0f) + (b and 0x0f)) and 0x10) == 0x10
+
+template hasHalfCarrySub(a, b: uint8): bool =
+  (a.int and 0x0f) - (b.int and 0x0f) < 0
+
+template hasHalfCarryAdd(a, b: uint16): bool =
+  (((a and 0x00ff) + (b and 0x00ff)) and 0x0100) == 0x0100
+
+
 #[ Misc ]#
 op opERR, 1:
   raise newException(Exception, "Not implemented opcode: " & opcode.int.toHex(2))
@@ -510,8 +520,10 @@ op opXORA, 1:
   result.dissasm = "XOR A"
 
 op opXORd8, 2:
-  opXor(cpu, cpu.readNext(mem))
-  result.dissasm = "XOR {d8}"
+  let
+    d8 = cpu.readNext(mem)
+  opXor(cpu, d8)
+  result.dissasm = &"XOR {d8}"
 
 func opInc(cpu: var Sm83State, mem: var Mcu, value: uint8): uint8 = 
   result = value + 1
@@ -553,13 +565,13 @@ op opDECA, 1:
   cpu[rA] = cpu.opDec(mem, cpu[rA])
   result.dissasm = &"DEC A"
 
-func opCp(cpu: var Sm83State, value: uint8) = 
+func opCp(cpu: var Sm83State, value: uint8) =
+  cpu.flags ?= (cpu[rA] < value, { fCarry })
+  cpu.flags ?= (hasHalfCarrySub(cpu[rA], value), { fHalfCarry })
   let
     res = cpu[rA] - value
   cpu.flags ?= (res == 0, { fZero })
   cpu.flags += { fAddSub }
-  # TODO: cpu.f.incl(fHalfCarry)
-  cpu.flags ?= (cpu[rA] < value, { fCarry })
 
 op opCPr8, 1:
   let
@@ -578,16 +590,12 @@ op opCPA, 1:
 op opCPu8, 2:
   let
     u8 = cpu.readNext(mem)
-    res = cpu[rA] - u8
-  cpu.flags ?= (res == 0, { fZero })
-  cpu.flags += { fAddSub }
-  # TODO: cpu.f.incl(fHalfCarry)
-  cpu.flags ?= (cpu[rA] < u8, { fCarry })
+  opCp(cpu, u8)
   result.dissasm = &"CP {u8:#x}"
 
 func opSub(cpu: var Sm83State, value: uint8) =
-  # TODO: cpu.f.incl(fHalfCarry)
   cpu.flags ?= (cpu[rA] < value, { fCarry })
+  cpu.flags ?= (hasHalfCarrySub(cpu[rA], value), { fHalfCarry })
   cpu[rA] = cpu[rA] - value
   cpu.flags ?= (cpu[rA] == 0, { fZero })
   cpu.flags += { fAddSub }
@@ -613,11 +621,11 @@ op opSUBd8, 2:
   result.dissasm = &"SUB {d8}"
 
 func opAdd(cpu: var Sm83State, value: uint8) =
+  cpu.flags ?= (cpu[rA].int + value.int > uint8.high.int, { fCarry })
+  cpu.flags ?= (hasHalfCarryAdd(cpu[rA], value), { fHalfCarry })
   cpu[rA] = cpu[rA] + value
   cpu.flags ?= (cpu[rA] == 0, { fZero })
   cpu.flags -= { fAddSub }
-  # TODO: cpu.f.incl(fHalfCarry)
-  # TODO: cpu.f.incl(fCarry)
 
 op opADDAr8, 1:
   let
@@ -708,17 +716,60 @@ op opCCF, 1:
 func opAdc(cpu: var Sm83State, value: uint8) =
   let
     carry = if fCarry in cpu.flags: 1'u8 else: 0
-  cpu.flags ?= (cpu[rA].int + value.int > 255, { fCarry })
-  # TODO: cpu.f.incl(fHalfCarry)
+  cpu.flags ?= (cpu[rA].int + value.int + carry.int > 255, { fCarry })
+  cpu.flags ?= (hasHalfCarryAdd(cpu[rA], value) or hasHalfCarryAdd(cpu[rA] + value, carry), { fHalfCarry })
   cpu[rA] = cpu[rA] + value + carry
   cpu.flags ?= (cpu[rA] == 0, { fZero })
   cpu.flags -= { fAddSub }
+
+op opADCr8, 1:
+  let
+    r8 = ((opcode and 0b00000111) + 2).Register8
+  opAdc(cpu, cpu[r8])
+  result.dissasm = &"ADC A,{r8}"
+
+op opADCpHL, 2:
+  opAdc(cpu, mem[cpu[rHL]])
+  result.dissasm = "ADC A,(HL)"
+
+op opADCA, 1:
+  opAdc(cpu, cpu[rA])
+  result.dissasm = "ADC A,A"
 
 op opADCd8, 1:
   let
     n = cpu.readNext(mem)
   opAdc(cpu, n)
-  result.dissasm = &"ADC {n}"
+  result.dissasm = &"ADC A,{n}"
+
+func opSbc(cpu: var Sm83State, value: uint8) =
+  let
+    carry = if fCarry in cpu.flags: 1'u8 else: 0
+  cpu.flags ?= (value.int + carry.int > cpu[rA].int, { fCarry })
+  cpu.flags ?= (hasHalfCarrySub(cpu[rA], value) or hasHalfCarrySub(cpu[rA] - value, carry), { fHalfCarry })
+  cpu[rA] = cpu[rA] - value - carry
+  cpu.flags ?= (cpu[rA] == 0, { fZero })
+  cpu.flags += { fAddSub }
+
+op opSBCr8, 1:
+  let
+    r8 = ((opcode and 0b00000111) + 2).Register8
+  opSbc(cpu, cpu[r8])
+  result.dissasm = &"SDC A,{r8}"
+
+op opSBCpHL, 2:
+  opSbc(cpu, mem[cpu[rHL]])
+  result.dissasm = "SDC A,(HL)"
+
+op opSBCA, 1:
+  opSbc(cpu, cpu[rA])
+  result.dissasm = "SDC A,A"
+
+op opSBCd8, 1:
+  let
+    n = cpu.readNext(mem)
+  opSbc(cpu, n)
+  result.dissasm = &"SDC A,{n}"
 
 
 #[ 16bit arithmetic/logical instructions ]#
@@ -743,10 +794,10 @@ op opDECSP, 2:
   result.dissasm = &"DEC SP"
 
 func opAddHl(cpu: var Sm83State, value: uint16) =
+  cpu.flags ?= (cpu[rHL].int + value.int > uint16.high.int, { fCarry })
+  cpu.flags ?= (hasHalfCarryAdd(cpu[rHL], value), { fHalfCarry })
   cpu[rHL] = cpu[rHL] + value
   cpu.flags -= { fAddSub }
-  # TODO: half carry flag
-  # TODO: carry flag
 
 op opADDHLr16, 2:
   let
@@ -1083,12 +1134,12 @@ const
     opLDr8r8,  opLDr8r8,   opLDr8r8,  opLDr8r8,  opLDr8r8,    opLDr8r8,  opLDr8HL, opLDr8A,  opLDr8r8,    opLDr8r8,   opLDr8r8,  opLDr8r8, opLDr8r8,    opLDr8r8,  opLDr8HL, opLDr8A,
     opLDr8r8,  opLDr8r8,   opLDr8r8,  opLDr8r8,  opLDr8r8,    opLDr8r8,  opLDr8HL, opLDr8A,  opLDr8r8,    opLDr8r8,   opLDr8r8,  opLDr8r8, opLDr8r8,    opLDr8r8,  opLDr8HL, opLDr8A,
     opLDpHLr8, opLDpHLr8,  opLDpHLr8, opLDpHLr8, opLDpHLr8,   opLDpHLr8, opHALT,   opLDpHLA, opLDAr8,     opLDAr8,    opLDAr8,   opLDAr8,  opLDAr8,     opLDAr8,   opLDAHL,  opLDAA,
-    opADDAr8,  opADDAr8,   opADDAr8,  opADDAr8,  opADDAr8,    opADDAr8,  opADDAHL, opADDAA,  opERR,       opERR,      opERR,     opERR,    opERR,       opERR,     opERR,    opERR,
-    opSUBr8,   opSUBr8,    opSUBr8,   opSUBr8,   opSUBr8,     opSUBr8,   opSUBHL,  opSUBA,   opERR,       opERR,      opERR,     opERR,    opERR,       opERR,     opERR,    opERR,
+    opADDAr8,  opADDAr8,   opADDAr8,  opADDAr8,  opADDAr8,    opADDAr8,  opADDAHL, opADDAA,  opADCr8,     opADCr8,    opADCr8,   opADCr8,  opADCr8,     opADCr8,   opADCpHL, opADCA,
+    opSUBr8,   opSUBr8,    opSUBr8,   opSUBr8,   opSUBr8,     opSUBr8,   opSUBHL,  opSUBA,   opSBCr8,     opSBCr8,    opSBCr8,   opSBCr8,  opSBCr8,     opSBCr8,   opSBCpHL, opSBCA,
     opANDr8,   opANDr8,    opANDr8,   opANDr8,   opANDr8,     opANDr8,   opANDpHL, opANDA,   opXORr8,     opXORr8,    opXORr8,   opXORr8,  opXORr8,     opXORr8,   opXORpHL, opXORA,
     opORr8,    opORr8,     opORr8,    opORr8,    opORr8,      opORr8,    opORpHL,  opORA,    opCPr8,      opCPr8,     opCPr8,    opCPr8,   opCPr8,      opCPr8,    opCPpHL,  opCPA,
     opRETcc,   opPOPr16,   opJPccu16, opJPu16,   opCALLccu16, opPUSHr16, opADDAd8, opRST,    opRETcc,     opRET,      opJPccu16, opPreCB,  opCALLccu16, opCALLu16, opADCd8,  opRST,
-    opRETcc,   opPOPr16,   opJPccu16, opINV,     opCALLccu16, opPUSHr16, opSUBd8,  opRST,    opRETcc,     opRETI,     opJPccu16, opINV,    opCALLccu16, opINV,     opERR,    opRST,
+    opRETcc,   opPOPr16,   opJPccu16, opINV,     opCALLccu16, opPUSHr16, opSUBd8,  opRST,    opRETcc,     opRETI,     opJPccu16, opINV,    opCALLccu16, opINV,     opSBCd8,    opRST,
     opLDHu8A,  opPOPr16,   opLDpCA,   opINV,     opINV,       opPUSHr16, opANDd8,  opRST,    opADDSPs8,   opJPHL,     opLDu16A,  opINV,    opINV,       opINV,     opXORd8,  opRST,
     opLDHAu8,  opPOPr16,   opLDApC,   opDI,      opINV,       opPUSHr16, opORd8,   opRST,    opLDHLSPps8, opLDSPHL,   opLDAu16,  opEI,     opINV,       opINV,     opCPu8,   opRST
   ]
