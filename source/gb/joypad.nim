@@ -35,8 +35,8 @@ type
 func calcState(state: JoypadState): uint8 =
   ## bit 7 - Not used
   ## bit 6 - Not used
-  ## bit 5 - P15 Select Button Keys      (0=Select)
-  ## bit 4 - P14 Select Direction Keys   (0=Select)
+  ## bit 5 - P15 Select Direction Keys   (0=Select)
+  ## bit 4 - P14 Select Button Keys      (0=Select)
   ## bit 3 - P13 Input Down  or Start    (0=Pressed) (Read Only)
   ## bit 2 - P12 Input Up    or Select   (0=Pressed) (Read Only)
   ## bit 1 - P11 Input Left  or Button B (0=Pressed) (Read Only)
@@ -57,9 +57,9 @@ proc pushHandler*(mcu: Mcu, joypad: Joypad) =
     ,
     write: proc(address: MemAddress, value: uint8) =
       if testBit(value, 5):
-        joypad.state.mode = rmButtonKeys
-      if testBit(value, 4):
         joypad.state.mode = rmDirectionKeys
+      elif testBit(value, 4):
+        joypad.state.mode = rmButtonKeys
     ,
     area: 0xff00.MemAddress .. 0xff00.MemAddress
   )
