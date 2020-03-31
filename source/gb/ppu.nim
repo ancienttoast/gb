@@ -1,6 +1,6 @@
 ##[
 
-  Video Display
+  Video Ppu
   ===========================
 
   160x144
@@ -39,7 +39,7 @@
     (Search OAM + Transfer data + H-Blank) * 144 + V-Blank
     456 * 144 + 4560 = 70224
 
-  * `https://gbdev.gg8.se/wiki/articles/Video_Display`_
+  * `https://gbdev.gg8.se/wiki/articles/Video_Ppu`_
   * `https://nnarain.github.io/2016/09/09/Gameboy-LCD-Controller.html`_
   * `https://www.reddit.com/r/EmuDev/comments/8uahbc/dmg_bgb_lcd_timings_and_cnt/e1iooum/`_
 
@@ -63,30 +63,30 @@ const
   TileAddress = [ 0x8800, 0x8000 ]
 
 type
-  DisplayGrayShades = enum
+  PpuGrayShades = enum
     gsWhite = 0
     gsLightGray = 1
     gsDarkGray = 2
     gsBlack = 3
   
-  DisplayMode = enum
+  PpuMode = enum
     mHBlank = 0
     mVBlank = 1
     mSearchingOam = 2
     mDataTransfer = 3
 
-  DisplayIOState* {.bycopy.} = tuple
+  PpuIoState* {.bycopy.} = tuple
     lcdc:     uint8   ## 0xff40  The main LCD control register.
-                      ##   bit 7 - LCD display enable flag
+                      ##   bit 7 - LCD Ppu enable flag
                       ##   bit 6 - Window background map selection. (0=0x9800-0x9bff, 1=0x9c00-0x9fff)
                       ##   bit 5 - Window enable flag
                       ##   bit 4 - BG and Window tile addressing mode. (0=0x8800-0x97ff, 1=0x8000-0x8fff)
                       ##   bit 3 - BG map selection, similar to _bit 6_. (0=0x9800-0x9bff, 1=0x9c00-0x9fff)
                       ##   bit 2 - OBJ size. 0: 8x8, 1: 8x16
-                      ##   bit 1 - OBJ display enable flag
-                      ##   bit 0 - BG/Window display/Priority
+                      ##   bit 1 - OBJ Ppu enable flag
+                      ##   bit 0 - BG/Window Ppu/Priority
                       ##           When Bit 0 is cleared, both background and window become blank (white), and
-                      ##           the Window Display Bit is ignored in that case. Only Sprites may still be displayed
+                      ##           the Window Ppu Bit is ignored in that case. Only Sprites may still be Ppued
                       ##           (if enabled in Bit 1).
     stat:     uint8   ## 0xff41  LCDC Status (R/W)
                       ##   bit 6   - LYC=LY Coincidence Interrupt (R/W)
@@ -94,7 +94,7 @@ type
                       ##   bit 4   - Mode 1 V-Blank Interrupt (R/W)
                       ##   bit 3   - Mode 0 H-Blank Interrupt (R/W)
                       ##   bit 2   - Coincidence Flag (0: LYC != LY, 1: LYC = LY) (R)
-                      ##   bit 1-0 - Mode Flag (see _DisplayMode_) (R)
+                      ##   bit 1-0 - Mode Flag (see _PpuMode_) (R)
                       ##               0: During H-Blank
                       ##               1: During V-Blank
                       ##               2: During Searching OAM
@@ -110,20 +110,20 @@ type
                       ##   is requested.
     dma:      uint8
     bgp:      uint8   ## 0xff47  BG Palette Data (R/W) [DMG Only]
-                      ##   Color number _DisplayGrayShades_ translation for BG and Window tiles.
-                      ##     bit 7-6 - _DisplayGrayShades_ for color number 3
-                      ##     bit 5-4 - _DisplayGrayShades_ for color number 2
-                      ##     bit 3-2 - _DisplayGrayShades_ for color number 1
-                      ##     bit 1-0 - _DisplayGrayShades_ for color number 0
+                      ##   Color number _PpuGrayShades_ translation for BG and Window tiles.
+                      ##     bit 7-6 - _PpuGrayShades_ for color number 3
+                      ##     bit 5-4 - _PpuGrayShades_ for color number 2
+                      ##     bit 3-2 - _PpuGrayShades_ for color number 1
+                      ##     bit 1-0 - _PpuGrayShades_ for color number 0
     obp0:     uint8   ## 0xff48  Object Palette 0 Data (R/W) [DMG Only]
-                      ##   Color number _DisplayGrayShades_ translation sprite palette 0.
+                      ##   Color number _PpuGrayShades_ translation sprite palette 0.
                       ##   Works exactly as _bgp_, except color number 0 is transparent.
     obp1:     uint8   ## 0xff48  Object Palette 1 Data (R/W) [DMG Only]
-                      ##   Color number _DisplayGrayShades_ translation sprite palette 1.
+                      ##   Color number _PpuGrayShades_ translation sprite palette 1.
                       ##   Works exactly as _bgp_, except color number 0 is transparent.
     unk2:     array[6, uint8]
 
-  DisplaySpriteAttribute {.bycopy.} = tuple
+  PpuSpriteAttribute {.bycopy.} = tuple
     y, x:  uint8      ## Specifies the sprite position (x - 8, y - 16)
     tile:  uint8      ## Specifies the tile number (0x00..0xff) from the memory at 0x8000-0x8fff
     flags: uint8      ## Attributes
@@ -135,45 +135,45 @@ type
                       ##   bit 3   - Tile VRAM-Bank (0=Bank 0, 1=Bank 1) [CGB Only]
                       ##   bit 2-0 - Palette number (OBP0-7) [CGB Only]
   
-  DisplayVram = array[8192, uint8]
+  PpuVram = array[8192, uint8]
   
-  DisplayOam = array[40, DisplaySpriteAttribute]
+  PpuOam = array[40, PpuSpriteAttribute]
 
-  DisplayState = tuple
-    io: DisplayIOState
-    vram: DisplayVram
-    oam: DisplayOam
+  PpuState = tuple
+    io: PpuIoState
+    vram: PpuVram
+    oam: PpuOam
     timer: range[0..457]
 
-  Display* = ref object
-    state*: DisplayState
+  Ppu* = ref object
+    state*: PpuState
     mcu: Mcu
 
 
-func isEnabled(self: DisplayIOState): bool =
+func isEnabled(self: PpuIoState): bool =
   self.lcdc.testBit(7)
 
-func bgMapAddress(self: DisplayIOState): MemAddress =
+func bgMapAddress(self: PpuIoState): MemAddress =
   MapAddress[self.lcdc.testBit(3).int].MemAddress
 
-func bgTileAddress(self: DisplayIOState): MemAddress =
+func bgTileAddress(self: PpuIoState): MemAddress =
   TileAddress[self.lcdc.testBit(4).int].MemAddress
 
-func spriteSize(self: DisplayIOState): bool =
+func spriteSize(self: PpuIoState): bool =
   self.lcdc.testBit(2)
 
-func bgColorShade(self: DisplayIOState, colorNumber: range[0..3]): DisplayGrayShades =
-  (self.bgp shl (6 - colorNumber*2) shr 6).DisplayGrayShades
+func bgColorShade(self: PpuIoState, colorNumber: range[0..3]): PpuGrayShades =
+  (self.bgp shl (6 - colorNumber*2) shr 6).PpuGrayShades
 
 
-func isXFlipped(sprite: DisplaySpriteAttribute): bool =
+func isXFlipped(sprite: PpuSpriteAttribute): bool =
   testBit(sprite.flags, 5)
 
-func isYFlipped(sprite: DisplaySpriteAttribute): bool =
+func isYFlipped(sprite: PpuSpriteAttribute): bool =
   testBit(sprite.flags, 6)
 
 
-proc step*(self: Display): bool {.discardable.} =
+proc step*(self: Ppu): bool {.discardable.} =
   self.state.timer += 1
   if self.state.timer > 456:
     self.state.io.ly += 1
@@ -185,7 +185,7 @@ proc step*(self: Display): bool {.discardable.} =
   if self.state.io.ly == 144:
     self.mcu.raiseInterrupt(iVBlank)
 
-proc pushHandler*(mcu: Mcu, self: Display) =
+proc pushHandler*(mcu: Mcu, self: Ppu) =
   let
     dmaHandler = MemHandler(
       read: proc(address: MemAddress): uint8 = 0,
@@ -193,7 +193,7 @@ proc pushHandler*(mcu: Mcu, self: Display) =
         # TODO: this should take 160 cycles
         let
           source = value.uint16 shl 8
-        for i in 0.uint16 ..< DisplayOam.sizeof.uint16:
+        for i in 0.uint16 ..< PpuOam.sizeof.uint16:
           mcu[(OamStartAddress.uint16 + i).MemAddress] = mcu[(source + i).MemAddress]
       ,
       area: 0xff46.MemAddress..0xff46.MemAddress
@@ -203,8 +203,8 @@ proc pushHandler*(mcu: Mcu, self: Display) =
   mcu.pushHandler(VramStartAddress, addr self.state.vram)
   mcu.pushHandler(OamStartAddress, addr self.state.oam)
 
-proc newDisplay*(mcu: Mcu): Display =
-  result = Display(
+proc newPpu*(mcu: Mcu): Ppu =
+  result = Ppu(
     mcu: mcu
   )
   mcu.pushHandler(result)
@@ -214,14 +214,14 @@ proc newDisplay*(mcu: Mcu): Display =
 
 
 const
-  Colors: array[DisplayGrayShades, ColorRGBU] = [
+  Colors: array[PpuGrayShades, ColorRGBU] = [
     [224'u8, 248, 208].ColorRGBU,
     [136'u8, 192, 112].ColorRGBU,
     [52'u8, 104, 86].ColorRGBU,
     [8'u8, 24, 32].ColorRGBU,
   ]
 
-proc tile(self: Display, tileAddress: int, gbPalette: uint8): Image[ColorRGBU] =
+proc tile(self: Ppu, tileAddress: int, gbPalette: uint8): Image[ColorRGBU] =
   result = initImage[ColorRGBU](8, 8)
   for i in 0..7:
     let
@@ -236,12 +236,12 @@ proc tile(self: Display, tileAddress: int, gbPalette: uint8): Image[ColorRGBU] =
         c.setBit(1)
       result[7 - j, i] = Colors[self.state.io.bgColorShade(c)]
 
-proc bgTile*(self: Display, tileNum: int): Image[ColorRGBU] =
+proc bgTile*(self: Ppu, tileNum: int): Image[ColorRGBU] =
   let
     tilePos = self.state.io.bgTileAddress().int + tileNum*16
   self.tile(tilePos, self.state.io.bgp)
 
-proc renderTiles*(self: Display, b: range[0..2]): Image[ColorRGBU] =
+proc renderTiles*(self: Ppu, b: range[0..2]): Image[ColorRGBU] =
   result = initImage[ColorRGBU](8*16, 8*8)
   for y in 0..7:
     for x in 0..15:
@@ -249,7 +249,7 @@ proc renderTiles*(self: Display, b: range[0..2]): Image[ColorRGBU] =
         tileImage = self.bgTile(b*128 + (x + y*16))
       result.blit(tileImage, x*8, y*8)
 
-proc renderBackground*(self: Display, drawGrid = true): Image[ColorRGBU] =
+proc renderBackground*(self: Ppu, drawGrid = true): Image[ColorRGBU] =
   let
     mapAddress = self.state.io.bgMapAddress()
   result = initImage[ColorRGBU](256, 256)
@@ -273,7 +273,7 @@ proc renderBackground*(self: Display, drawGrid = true): Image[ColorRGBU] =
       result.drawLine(0, y*8, result.width - 1, y*8, [0'u8, 255, 0].ColorRGBU)
 
 
-proc renderSprites*(self: Display): Image[ColorRGBU] =
+proc renderSprites*(self: Ppu): Image[ColorRGBU] =
   result = initImage[ColorRGBU](Width, Height)
   for sprite in self.state.oam:
     if sprite.x == 0 or sprite.x >= 160'u8 or sprite.y == 0 or sprite.y >= 168'u8:

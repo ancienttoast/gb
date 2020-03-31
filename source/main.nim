@@ -2,16 +2,16 @@ import
   std/strformat,
   nimgl/[glfw, opengl, imgui], nimgl/imgui/[impl_opengl, impl_glfw],
   imageman,
-  style, gb, gb/[cpu, timer, display, joypad]
+  style, gb, gb/[cpu, timer, ppu, joypad]
 
 
 
 const
   #BootRom = "123/[BIOS] Nintendo Game Boy Boot ROM (World).gb"
   BootRom = ""
-  #Rom = "123/gb-test-roms-master/cpu_instrs/individual/06-ld r,r.gb"
+  Rom = "123/gb-test-roms-master/cpu_instrs/individual/02-interrupts.gb"
   #Rom = "123/Tetris (World) (Rev A).gb"
-  Rom = "123/bgbw64/bgbtest.gb"
+  #Rom = "123/bgbw64/bgbtest.gb"
 
 
 
@@ -107,6 +107,7 @@ proc main() =
 
   discard window.setKeyCallback(keyProc)
   window.makeContextCurrent()
+  glfwSwapInterval(0)
 
   assert glInit()
 
@@ -140,8 +141,8 @@ proc main() =
   discard window.setKeyCallback(
     proc(window: GLFWWindow, key: int32, scancode: int32, action: int32, mods: int32) {.cdecl.} =
       case key
-      of GLFWKey.S: keys[kA] = action != GLFWRelease
-      of GLFWKey.A: keys[kB] = action != GLFWRelease
+      of GLFWKey.A: keys[kA] = action != GLFWRelease
+      of GLFWKey.S: keys[kB] = action != GLFWRelease
       of GLFWKey.Enter: keys[kStart] = action != GLFWRelease
       of GLFWKey.RightShift: keys[kSelect] = action != GLFWRelease
       of GLFWKey.Up: keys[kUp] = action != GLFWRelease
@@ -165,6 +166,8 @@ proc main() =
       gameboy = newGameboy(BootRom)
       gameboy.load(newRom)
       newRom = ""
+      gbRunning = true
+      isRunning = true
 
     for key, state in keys:
       gameboy.joypad.setKey(key, state)
@@ -175,10 +178,10 @@ proc main() =
           needsRedraw = false
         while not needsRedraw and gbRunning and isRunning:
           let
-            cycles = gameboy.cpu.step(gameboy.mcu)
+            cycles = gameboy.cpu.step(gameboy.mcu) * 4
           for i in 0..<cycles:
             gameboy.timer.step()
-            needsRedraw = needsRedraw or gameboy.display.step()
+            needsRedraw = needsRedraw or gameboy.ppu.step()
       except:
         echo getCurrentException().msg
         echo getStackTrace(getCurrentException())
@@ -210,14 +213,14 @@ proc main() =
         if igBeginTabBar("display"):
           if igBeginTabItem("BG map"):
             let
-              image = gameboy.display.renderBackground(drawGrid = false)
+              image = gameboy.ppu.renderBackground(drawGrid = false)
             bgTexture.upload(image)
             igImage(cast[pointer](bgTexture.texture), ImVec2(x: bgTexture.width.float32 * 2, y: bgTexture.height.float32 * 2))
             igEndTabItem()
           if igBeginTabItem("Tile map"):
             for i in 0..2:
               let
-                image = gameboy.display.renderTiles(i)
+                image = gameboy.ppu.renderTiles(i)
               tileMapTextures[i].upload(image)
               igImage(cast[pointer](tileMapTextures[i].texture), ImVec2(x: tileMapTextures[i].width.float32 * 2, y: tileMapTextures[i].height.float32 * 2))
             igEndTabItem()
@@ -230,7 +233,7 @@ proc main() =
       igBegin("Sprite map", flags = ImGuiWindowFlags.NoResize or ImGuiWindowFlags.NoCollapse)
       if not igIsWindowCollapsed():
         let
-          image = gameboy.display.renderSprites()
+          image = gameboy.ppu.renderSprites()
         spriteTexture.upload(image)
         igImage(cast[pointer](spriteTexture.texture), ImVec2(x: spriteTexture.width.float32 * 2, y: spriteTexture.height.float32 * 2))
       igEnd()
@@ -240,7 +243,7 @@ proc main() =
     
     if showOam:
       let
-        oams = gameboy.display.state.oam
+        oams = gameboy.ppu.state.oam
       igSetNextWindowPos(ImVec2(x: 693, y: 24), FirstUseEver)
       igSetNextWindowSize(ImVec2(x: 521, y: 390), FirstUseEver)
       igBegin("OAM")
@@ -249,7 +252,7 @@ proc main() =
         col = 0
       for i, oam in oams:
         let
-          tile = gameboy.display.bgTile(oam.tile.int)
+          tile = gameboy.ppu.bgTile(oam.tile.int)
         oamTextures[i].upload(tile)
         igImage(cast[pointer](oamTextures[i].texture), ImVec2(x: oamTextures[i].width.float32 * 2, y: oamTextures[i].height.float32 * 2))
         igSameLine()
@@ -293,7 +296,7 @@ proc main() =
           cycles = gameboy.cpu.step(gameboy.mcu)
         for i in 0..<cycles:
           gameboy.timer.step()
-          discard gameboy.display.step()
+          discard gameboy.ppu.step()
       
       igSeparator()
 

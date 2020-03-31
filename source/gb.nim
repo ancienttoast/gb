@@ -9,7 +9,7 @@
 
 ]##
 import
-  gb/[mem, cpu, timer, display, cartridge, joypad]
+  gb/[mem, cpu, timer, ppu, cartridge, joypad]
 
 
 
@@ -89,7 +89,7 @@ type
     mcu*: Mcu
     cpu*: Cpu
     timer*: Timer
-    display*: Display
+    ppu*: Ppu
     joypad*: Joypad
 
     boot: BootRom
@@ -104,7 +104,7 @@ proc load*(self: Gameboy, rom = "") =
   self.mcu.pushHandler(0, addr self.testMemory)
   self.mcu.pushHandler(self.cpu)
   self.mcu.pushHandler(self.timer)
-  self.mcu.pushHandler(self.display)
+  self.mcu.pushHandler(self.ppu)
   self.mcu.pushHandler(self.joypad)
   
   if rom != "":
@@ -122,7 +122,7 @@ proc newGameboy*(bootRom = ""): Gameboy =
     mcu: mcu,
     cpu: newCpu(mcu),
     timer: newTimer(mcu),
-    display: newDisplay(mcu),
+    ppu: newPpu(mcu),
     joypad: newJoypad(mcu)
   )
   if bootRom != "":
