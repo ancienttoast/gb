@@ -79,10 +79,11 @@ type
 
 
 const
-  BankSize = 16_384
+  RomBankSize = 16_384
+  RamBankSize = 8_192
   # TODO: use CartridgeRomSize somehow
   RomSize: array[0..11, int] = [ 32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608, 1179648, 1310720, 1572864 ]
-  RamSize: array[CartridgeRamSize, int] = [ 0, 2048, 8192, 32768, 131072, 65536 ]
+  RamSize: array[CartridgeRamSize, int] = [ 0, 2048, 8192, 32_768, 131_072, 65_536 ]
 
 const
   HeaderArea = 0x0100..0x014f
@@ -109,23 +110,27 @@ proc initMbcNone(mcu: Mcu, state: ptr MbcState, data: ptr string) =
     )
   mcu.pushHandler(handler)
 
-proc initMbcOne(mcu: Mcu, state: ptr MbcState, data: ptr string) =
+proc initMbcOne(mcu: Mcu, state: ptr MbcState, data: ptr string, ramSize: CartridgeRamSize) =
   state.rom = 1
   var
     # TODO: move to the MbcState
     select = 0
+    ramEnable = false
+    ram = newSeq[uint8](RamSize[ramSize])
   let
-    handler = MemHandler(
+    romHandler = MemHandler(
       read: proc(address: MemAddress): uint8 =
         if address in 0x0000'u16..0x3fff'u16:
           cast[uint8](data[address.int])
         else:
           let
             p = address - 0x4000
-          cast[uint8](data[(state.rom.int * BankSize) + p.int])
+          cast[uint8](data[(state.rom.int * RomBankSize) + p.int])
       ,
       write: proc(address: MemAddress, value: uint8) =
         case address
+        of 0x0000'u16-0x1fff'u16:
+          ramEnable = ramSize != crsNone and (value and 0x0f) == 0x0a
         of 0x2000'u16..0x3fff'u16:
           state.rom = state.rom and 0b11100000
           state.rom = state.rom or (value and 0b00011111)
@@ -136,6 +141,8 @@ proc initMbcOne(mcu: Mcu, state: ptr MbcState, data: ptr string) =
           if select == 0:
             state.rom = state.rom and 0b00011111
             state.rom = state.rom or (value and 0b00000011 shl 5)
+          else:
+            state.ram = (value and 0b00000011 shl 5).int
         of 0x6000'u16..0x7fff'u16:
           assert value in {0, 1}
           select = value.int
@@ -144,7 +151,29 @@ proc initMbcOne(mcu: Mcu, state: ptr MbcState, data: ptr string) =
       ,
       area: CartridgeStartAddress.MemAddress ..< 0x7fff.MemAddress
     )
-  mcu.pushHandler(handler)
+    ramHandler = MemHandler(
+      read: proc(address: MemAddress): uint8 =
+        if not ramEnable:
+          return 0
+        let
+          p = (state.ram.int * RomBankSize) + (address.int - 0xa000)
+        if p > ram.high:
+          0'u8
+        else:
+          ram[p]
+      ,
+      write: proc(address: MemAddress, value: uint8) =
+        if not ramEnable:
+          return
+        let
+          p = (state.ram.int * RomBankSize) + (address.int - 0xa000)
+        if p <= ram.high:
+          ram[p] = value
+      ,
+      area: 0xa000'u16..0xbfff'u16
+    )
+  mcu.pushHandler(romHandler)
+  mcu.pushHandler(ramHandler)
 
 
 
@@ -170,7 +199,7 @@ proc pushHandlers*(mcu: Mcu, cart: Cartridge) =
   case cart.kind:
   of ctRom:
     mcu.initMbcNone(addr cart.state, addr cart.data)
-  of ctMbc1:
-    mcu.initMbcOne(addr cart.state, addr cart.data)
+  of ctMbc1, ctMbc1Ram, ctMbc1RamBattery:
+    mcu.initMbcOne(addr cart.state, addr cart.data, cart.ramSize)
   else:
     assert false, "Unsupported cartridge type " & $cart.kind
