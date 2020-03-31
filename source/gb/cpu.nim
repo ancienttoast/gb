@@ -184,14 +184,19 @@ template bit(opcode: uint8): range[0..7] =
   (opcode and 0b00111000) shr 3
 
 
-template hasHalfCarryAdd(a, b: uint8): bool =
-  (((a and 0x0f) + (b and 0x0f)) and 0x10) == 0x10
-
 template hasHalfCarrySub(a, b: uint8): bool =
   (a and 0x0f) < (b and 0x0f)
 
+func setBits[T: uint8 | uint16](bits: Slice[int]): T =
+  for b in bits:
+    result = result or (1.T shl b.T)
 
-template highUint8(u: uint16): uint8 = ((u and 0xff00) shr 8).uint8
+func hasHalfCarryAdd[T: uint8 | uint16](bits: static[int], a, b: T): bool =
+  const
+    mask = setBits[T](0..bits)
+  (a and mask) + (b and mask) > mask
+
+template hasHalfCarryAdd(a, b: uint8): bool = hasHalfCarryAdd(3, a, b)
 
 
 #[ Misc ]#
@@ -453,17 +458,14 @@ op opLDSPHL, 2:
   cpu.sp = cpu[rHL]
   result.dissasm = "LD SP,HL"
 
-func hasHalfCarry(a, b: int): bool =
-  (((a and 0xf0) + (b and 0xf0)) and 0x10) == 0x10
-
 op opLDHLSPps8, 3:
   let
-    s8 = cast[int8](cpu.readNext(mem))
-    res = cpu.sp.int + s8
-  cpu[rHL] = res.uint16
+    s8 = cpu.readNext(mem)
+    d8 = cast[int8](s8)
+  cpu.flags ?= (hasHalfCarryAdd(7, cpu.sp, s8), { fCarry })
+  cpu.flags ?= (hasHalfCarryAdd(3, cpu.sp, s8), { fHalfCarry })
+  cpu[rHL] = (cpu.sp.int + d8.int).uint16
   cpu.flags -= { fZero, fAddSub }
-  cpu.flags ?= (res > uint16.high.int or res < 0, { fCarry })
-  cpu.flags ?= (hasHalfCarry(cpu.sp.int, s8), { fHalfCarry })
   result.dissasm = &"LD HL,SP+{s8:#x}"
 
 op opLDu16SP, 5:
@@ -474,17 +476,15 @@ op opLDu16SP, 5:
 
 op opPOPr16, 3:
   let
-    xx = (opcode and 0b00110000) shr 4
-  assert xx in {0, 1, 2, 3}
-  if xx == 3:
-    cpu[rAF] = cpu.pop[:uint16](mem)
-    # TODO: ?flags?
-    result.dissasm = "POP AF"
-  else:
-    let
-      r16 = (xx + 1).Register16
-    cpu[r16] = cpu.pop[:uint16](mem)
-    result.dissasm = &"POP {r16}"
+    xx = (opcode and 0b00110000) shr 4 + 1
+  assert xx in {1, 2, 3, 4}
+  let
+    r16 = (if xx == 4: 0'u8 else: xx).Register16
+  cpu[r16] = cpu.pop[:uint16](mem)
+  if r16 == rAF:
+    # zero out the lower nibble of register f since it cannot be modified
+    cpu[rF] = cpu[rF] and 0b11110000
+  result.dissasm = &"POP {r16}"
 
 op opPUSHr16, 4:
   let
@@ -772,6 +772,28 @@ op opSBCd8, 1:
   opSbc(cpu, n)
   result.dissasm = &"SDC A,{n}"
 
+op opDAA, 1:
+  # from: http://forums.nesdev.com/viewtopic.php?f=20&t=15944#p196282
+  # note: assumes a is a uint8_t and wraps from 0xff to 0
+  if fAddSub notin cpu.flags:
+    # after an addition, adjust if (half-)carry occurred or if result is out of bounds
+    if fCarry in cpu.flags or cpu[rA] > 0x99'u8:
+      cpu[rA] = cpu[rA] + 0x60
+      cpu.flags += { fCarry }
+    if fHalfCarry in cpu.flags or (cpu[rA] and 0x0f) > 0x09'u8:
+      cpu[rA] = cpu[rA] + 0x6
+  else:
+    # after a subtraction, only adjust if (half-)carry occurred
+    if fCarry in cpu.flags:
+      cpu[rA] = cpu[rA] - 0x60
+    if fHalfCarry in cpu.flags:
+      cpu[rA] = cpu[rA] - 0x6
+
+  # these flags are always updated
+  cpu.flags ?= (cpu[rA] == 0, { fZero }) # the usual z flag
+  cpu.flags -= { fHalfCarry } # h flag is always cleared
+  result.dissasm = "DAA"
+
 
 #[ 16bit arithmetic/logical instructions ]#
 op opINCr16, 2:
@@ -795,8 +817,8 @@ op opDECSP, 2:
   result.dissasm = &"DEC SP"
 
 func opAddHl(cpu: var Sm83State, value: uint16) =
-  cpu.flags ?= (cpu[rHL].int + value.int > uint16.high.int, { fCarry })
-  cpu.flags ?= (hasHalfCarryAdd(cpu[rHL].highUint8, value.highUint8), { fHalfCarry })
+  cpu.flags ?= (cpu[rHL] > uint16.high - value, { fCarry })
+  cpu.flags ?= (hasHalfCarryAdd(11, cpu[rHL], value), { fHalfCarry })
   cpu[rHL] = cpu[rHL] + value
   cpu.flags -= { fAddSub }
 
@@ -812,15 +834,11 @@ op opADDHLSP, 2:
 
 op opADDSPs8, 2:
   let
-    s8 = cast[int8](cpu.readNext(mem))
-    r = cpu.sp.int + s8.int
-    p = (cpu.sp and 0x00ff).uint8
-  cpu.flags ?= ( p.int + s8.int > uint8.high.int or p.int + s8.int < 0, { fCarry })
-  if s8 >= 0:
-    cpu.flags ?= (hasHalfCarryAdd(p, s8.uint8), { fHalfCarry })
-  else:
-    cpu.flags ?= (hasHalfCarrySub(p, s8.uint8), { fHalfCarry })
-  cpu.sp = r.uint16
+    s8 = cpu.readNext(mem)
+    d8 = cast[int8](s8)
+  cpu.flags ?= (hasHalfCarryAdd(7, cpu.sp, s8), { fCarry })
+  cpu.flags ?= (hasHalfCarryAdd(3, cpu.sp, s8), { fHalfCarry })
+  cpu.sp = (cpu.sp.int + d8.int).uint16
   cpu.flags -= { fZero, fAddSub }
   result.dissasm = &"ADD SP,{s8}"
 
@@ -1126,7 +1144,7 @@ op opNOP, 1:
 op opSTOP, 1:
   # TODO
   result.dissasm = "STOP"
-  raise newException(Exception, "Not implemented opcode: " & opcode.int.toHex(2))
+  #raise newException(Exception, "Not implemented opcode: " & opcode.int.toHex(2))
 
 op opHALT, 1:
   cpu.status += { sfHalted }
@@ -1152,7 +1170,7 @@ const
   OpcodeTable: array[256, InstructionDefinition] = [
     opNOP,     opLDr16u16, opLDBCA,   opINCr16,  opINCr8,     opDECr8,   opLDr8d8, opRLCA,   opLDu16SP,   opADDHLr16, opLDABC,   opDECr16, opINCr8,     opDECr8,   opLDr8d8, opRRCA,
     opSTOP,    opLDr16u16, opLDDEA,   opINCr16,  opINCr8,     opDECr8,   opLDr8d8, opRLA,    opJRs8,      opADDHLr16, opLDADE,   opDECr16, opINCr8,     opDECr8,   opLDr8d8, opRRA,
-    opJRccs8,  opLDr16u16, opLDHLpA,  opINCr16,  opINCr8,     opDECr8,   opLDr8d8, opERR,    opJRccs8,    opADDHLr16, opLDAHLp,  opDECr16, opINCr8,     opDECr8,   opLDr8d8, opCPL,
+    opJRccs8,  opLDr16u16, opLDHLpA,  opINCr16,  opINCr8,     opDECr8,   opLDr8d8, opDAA,    opJRccs8,    opADDHLr16, opLDAHLp,  opDECr16, opINCr8,     opDECr8,   opLDr8d8, opCPL,
     opJRccs8,  opLDr16u16, opLDHLmA,  opINCSP,   opINCpHL,    opDECpHL,  opLDHLd8, opSCF,    opJRccs8,    opADDHLSP,  opLDAHLm,  opDECSP,  opINCA,      opDECA,    opLDAu8,  opCCF,
     opLDr8r8,  opLDr8r8,   opLDr8r8,  opLDr8r8,  opLDr8r8,    opLDr8r8,  opLDr8HL, opLDr8A,  opLDr8r8,    opLDr8r8,   opLDr8r8,  opLDr8r8, opLDr8r8,    opLDr8r8,  opLDr8HL, opLDr8A,
     opLDr8r8,  opLDr8r8,   opLDr8r8,  opLDr8r8,  opLDr8r8,    opLDr8r8,  opLDr8HL, opLDr8A,  opLDr8r8,    opLDr8r8,   opLDr8r8,  opLDr8r8, opLDr8r8,    opLDr8r8,  opLDr8HL, opLDr8A,
