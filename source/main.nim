@@ -1,17 +1,19 @@
 import
-  std/strformat,
+  std/[strformat, times, monotimes],
   nimgl/[glfw, opengl, imgui], nimgl/imgui/[impl_opengl, impl_glfw],
   imageman,
   style, gb, gb/[cpu, timer, ppu, joypad]
+
+when defined(profiler):
+  import nimprof
 
 
 
 const
   #BootRom = "123/[BIOS] Nintendo Game Boy Boot ROM (World).gb"
   BootRom = ""
-  Rom = "123/gb-test-roms-master/cpu_instrs/individual/02-interrupts.gb"
-  #Rom = "123/Tetris (World) (Rev A).gb"
-  #Rom = "123/bgbw64/bgbtest.gb"
+  #Rom = "123/gb-test-roms-master/cpu_instrs/individual/02-interrupts.gb"
+  Rom = "123/Zelda no Densetsu - Yume o Miru Shima (Japan) (Rev A).gb"
 
 
 
@@ -122,13 +124,12 @@ proc main() =
   var
     gameboy = newGameboy(BootRom)
     isRunning = true
-    showBgMap = true
-    showSpriteMap = true
-    showOam = true
+    showPpu = true
     showControls = true
     showCpu = true
     showDemo = false
     bgTexture = initTexture()
+    mainTexture = initTexture()
     tileMapTextures = [initTexture(), initTexture(), initTexture()]
     spriteTexture = initTexture()
     oamTextures = newSeq[Texture](40)
@@ -159,6 +160,8 @@ proc main() =
         newRom = $paths[0]
   )
 
+  var
+    start = getMonoTime()
   while not window.windowShouldClose:
     glfwPollEvents()
 
@@ -172,6 +175,10 @@ proc main() =
     for key, state in keys:
       gameboy.joypad.setKey(key, state)
 
+    let
+      dt = (getMonoTime() - start).inNanoseconds.int
+      speed = (16_666_666 / dt) * 100
+    start = getMonoTime()
     if isRunning:
       try:
         var
@@ -196,19 +203,17 @@ proc main() =
     if igBeginMainMenuBar():
       if igBeginMenu("Window"):
         igCheckbox("Controls", addr showControls) 
-        igCheckbox("BG Window", addr showBgMap)
-        igCheckbox("Sprite Window", addr showSpriteMap)
+        igCheckbox("Ppu", addr showPpu)
         igCheckbox("Cpu window", addr showCpu)
-        igCheckbox("OAM", addr showOam)
         igSeparator()
         igCheckbox("Demo", addr showDemo)
         igEndMenu()
       igEndMainMenuBar()
 
-    if showBgMap:
-      igSetNextWindowPos(ImVec2(x: 159, y: 24), FirstUseEver)
+    if showPpu:
+      igSetNextWindowPos(ImVec2(x: 745, y: 24), FirstUseEver)
       igSetNextWindowSize(ImVec2(x: 530, y: 570), FirstUseEver)
-      igBegin("BG map", flags = ImGuiWindowFlags.NoResize or ImGuiWindowFlags.NoCollapse)
+      igBegin("Ppu", flags = ImGuiWindowFlags.NoResize or ImGuiWindowFlags.NoCollapse)
       if not igIsWindowCollapsed():
         if igBeginTabBar("display"):
           if igBeginTabItem("BG map"):
@@ -217,6 +222,12 @@ proc main() =
             bgTexture.upload(image)
             igImage(cast[pointer](bgTexture.texture), ImVec2(x: bgTexture.width.float32 * 2, y: bgTexture.height.float32 * 2))
             igEndTabItem()
+          if igBeginTabItem("Sprite map"):
+            let
+              image = gameboy.ppu.renderSprites()
+            spriteTexture.upload(image)
+            igImage(cast[pointer](spriteTexture.texture), ImVec2(x: spriteTexture.width.float32 * 2, y: spriteTexture.height.float32 * 2))
+            igEndTabItem()
           if igBeginTabItem("Tile map"):
             for i in 0..2:
               let
@@ -224,53 +235,47 @@ proc main() =
               tileMapTextures[i].upload(image)
               igImage(cast[pointer](tileMapTextures[i].texture), ImVec2(x: tileMapTextures[i].width.float32 * 2, y: tileMapTextures[i].height.float32 * 2))
             igEndTabItem()
+          if igBeginTabItem("OAM"):
+            let
+              oams = gameboy.ppu.state.oam
+            igColumns(8, "oam", true)
+            var
+              col = 0
+            for i, oam in oams:
+              let
+                tile = gameboy.ppu.bgTile(oam.tile.int)
+              oamTextures[i].upload(tile)
+              igImage(cast[pointer](oamTextures[i].texture), ImVec2(x: oamTextures[i].width.float32 * 2, y: oamTextures[i].height.float32 * 2))
+              igSameLine()
+              igBeginGroup()
+              igText(&"{oam.y:#04x}")
+              igText(&"{oam.x:#04x}")
+              igText(&"{oam.tile:#04x}")
+              igText(&"{oam.flags:#04x}")
+              igEndGroup()
+
+              igNextColumn()
+
+              col += 1
+              if col >= 8 and i < 39:
+                col = 0
+                igSeparator()
+            igEndTabItem()
           igEndTabBar()
       igEnd()
     
-    if showSpriteMap:
-      igSetNextWindowPos(ImVec2(x: 693, y: 418), FirstUseEver)
-      igSetNextWindowSize(ImVec2(x: 337, y: 325), FirstUseEver)
-      igBegin("Sprite map", flags = ImGuiWindowFlags.NoResize or ImGuiWindowFlags.NoCollapse)
-      if not igIsWindowCollapsed():
-        let
-          image = gameboy.ppu.renderSprites()
-        spriteTexture.upload(image)
-        igImage(cast[pointer](spriteTexture.texture), ImVec2(x: spriteTexture.width.float32 * 2, y: spriteTexture.height.float32 * 2))
-      igEnd()
+    igSetNextWindowPos(ImVec2(x: 402, y: 24), FirstUseEver)
+    igSetNextWindowSize(ImVec2(x: 338, y: 326), FirstUseEver)
+    igBegin(&"Main", flags = ImGuiWindowFlags.NoResize or ImGuiWindowFlags.NoCollapse)
+    if not igIsWindowCollapsed():
+      let
+        image = gameboy.ppu.renderLcd()
+      mainTexture.upload(image)
+      igImage(cast[pointer](mainTexture.texture), ImVec2(x: mainTexture.width.float32 * 2, y: mainTexture.height.float32 * 2))
+    igEnd()
     
     if showCpu:
       cpuWindow(gameboy.cpu.state)
-    
-    if showOam:
-      let
-        oams = gameboy.ppu.state.oam
-      igSetNextWindowPos(ImVec2(x: 693, y: 24), FirstUseEver)
-      igSetNextWindowSize(ImVec2(x: 521, y: 390), FirstUseEver)
-      igBegin("OAM")
-      igColumns(8, "oam", true)
-      var
-        col = 0
-      for i, oam in oams:
-        let
-          tile = gameboy.ppu.bgTile(oam.tile.int)
-        oamTextures[i].upload(tile)
-        igImage(cast[pointer](oamTextures[i].texture), ImVec2(x: oamTextures[i].width.float32 * 2, y: oamTextures[i].height.float32 * 2))
-        igSameLine()
-        igBeginGroup()
-        igText(&"{oam.y:#04x}")
-        igText(&"{oam.x:#04x}")
-        igText(&"{oam.tile:#04x}")
-        igText(&"{oam.flags:#04x}")
-        igEndGroup()
-
-        igNextColumn()
-
-        col += 1
-        if col >= 8 and i < 39:
-          col = 0
-          igSeparator()
-
-      igEnd()
 
     if showControls:
       igSetNextWindowPos(ImVec2(x: 4, y: 24), FirstUseEver)
@@ -301,6 +306,7 @@ proc main() =
       igSeparator()
 
       igCheckbox("gbRunning", addr gbRunning)
+      igText(&"{speed:6.2f}")
       igEnd()
     
     if showDemo:
@@ -317,6 +323,7 @@ proc main() =
 
   destroy spriteTexture
   destroy bgTexture
+  destroy mainTexture
   igOpenGL3Shutdown()
   igGlfwShutdown()
   context.igDestroyContext()

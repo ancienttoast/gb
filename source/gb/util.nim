@@ -1,5 +1,10 @@
 import
-  std/endians
+  std/[endians, bitops]
+
+
+
+template wrap32*(value: int): int =
+  value and 0b00011111
 
 
 
@@ -16,8 +21,28 @@ proc `?=`*[T](self: var set[T], value: tuple[doInclude: bool, other: set[T]]) =
     self -= value.other
 
 
+
 proc littleEndian*(value: uint16): uint16 =
   littleEndian16(addr result, unsafeAddr value)
 
 proc bigEndian*(value: uint16): uint16 =
   bigEndian16(addr result, unsafeAddr value)
+
+
+
+export testBit
+
+func setBit*[T: uint8 | uint16 | int](value: var T, bit: static[int]) =
+  const
+    Mask = 1.T shl bit
+  value = value or Mask
+
+func clearBit*[T: uint8 | uint16 | int](value: var T, bit: static[int]) =
+  const
+    Mask = 1.T shl bit
+  value = value and not Mask
+
+func testBit*[T: uint8 | uint16 | int](value: T, bit: static[int]): bool =
+  const
+    Mask = 1.T shl bit
+  (value and Mask) == Mask
