@@ -358,7 +358,7 @@ suite "LR35902 - 16bit load/store/move instructions":
           m[7] = 0x12
           m[6] = 0x34
   
-  for reg in [(0xc1, rBC), (0xd1, rDE), (0xe1, rHL), (0xf1, rAF)]:
+  for reg in [(0xc1, rBC), (0xd1, rDE), (0xe1, rHL)]:
     cpuTest &"POP {reg[1]}":
       mem[0] = reg[0].uint8
       mem[7] = 0x12
@@ -370,6 +370,18 @@ suite "LR35902 - 16bit load/store/move instructions":
           s.sp = 8
           s[reg[1]] = 0x1234
         oldM = mem.modMem
+  
+  cpuTest "POP AF":
+    mem[0] = 0xf1
+    mem[7] = 0x12
+    mem[6] = 0x34
+    cpu.state.sp = 6
+    let
+      oldS = cpu.modState:
+        s.pc += 1
+        s.sp = 8
+        s[rAF] = 0x1230
+      oldM = mem.modMem
 
 
 suite "LR35902 - 16bit arithmetic/logical instructions":
