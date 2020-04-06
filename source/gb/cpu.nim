@@ -2,6 +2,7 @@
 
   Sharp LR35902
 
+  * `https://pastraiser.com/cpu/gameboy/gameboy_opcodes.html`_
   * `https://robdor.com/2016/08/10/gameboy-emulator-half-carry-flag/`_
   * `https://stackoverflow.com/a/57981912`_
   * `https://pastraiser.com/cpu/gameboy/gameboy_opcodes.htm`_
@@ -165,7 +166,7 @@ template op(name, dur, body: untyped): untyped {.dirty.} =
     `name` = InstructionDefinition(
       f: proc(opcode: uint8, cpu: var Sm83State, mem: var Mcu): InstructionInfo =
         result.duration = dur
-        result.dissasm = "?"
+        #result.dissasm = "?"
         body
     )
 
@@ -200,22 +201,19 @@ template hasHalfCarryAdd(a, b: uint8): bool = hasHalfCarryAdd(3, a, b)
 
 
 #[ Misc ]#
-op opERR, 1:
-  raise newException(Exception, "Not implemented opcode: " & opcode.int.toHex(2))
-
 op opINV, 1:
+  #result.dissasm = &"Invalid opcode ({opcode:#04x})"
   discard
-  result.dissasm = "Invalid opcode (" & opcode.int.toHex(2) & ")"
 
 
 #[ Jumps/calls ]#
 op opJPu16, 4:
   cpu.pc = cpu.nn(mem)
-  result.dissasm = &"JP {cpu.pc:#x}"
+  #result.dissasm = &"JP {cpu.pc:#x}"
 
 op opJPHL, 1:
   cpu.pc = cpu[rHL]
-  result.dissasm = "JP HL"
+  #result.dissasm = "JP HL"
 
 op opJPccu16, 3:
   # TODO: variable length  cc == false: 3, cc == true: 4
@@ -229,13 +227,13 @@ op opJPccu16, 3:
       of jcC:  fCarry in cpu.flags
   if cond:
     cpu.pc = nn
-  result.dissasm = &"JP {cc},{nn:#x}"
+  #result.dissasm = &"JP {cc},{nn:#x}"
 
 op opJRs8, 3:
   let
     e = cast[int8](cpu.readNext(mem))
   cpu.pc = (cpu.pc.int + e.int).uint16
-  result.dissasm = &"JR {e:#x}"
+  #result.dissasm = &"JR {e:#x}"
 
 op opJRccs8, 2:
   # TODO: variable length  cc == false: 2, cc == true: 3
@@ -249,7 +247,7 @@ op opJRccs8, 2:
       of jcC:  fCarry in cpu.flags
   if cond:
     cpu.pc = (cpu.pc.int + e.int).uint16
-  result.dissasm = &"JR {cc},{e:#x}"
+  #result.dissasm = &"JR {cc},{e:#x}"
 
 func opCall(cpu: var Sm83State, mem: var Mcu, nn: uint16) =
   cpu.push(mem, cpu.pc)
@@ -259,7 +257,7 @@ op opCALLu16, 6:
   let
     nn = cpu.nn(mem)
   opCall(cpu, mem, nn)
-  result.dissasm = &"CALL {nn:#x}"
+  #result.dissasm = &"CALL {nn:#x}"
 
 op opCALLccu16, 3:
   # TODO: variable length  cc == false: 3, cc == true: 6
@@ -273,11 +271,11 @@ op opCALLccu16, 3:
       of jcC:  fCarry in cpu.flags
   if cond:
     opCall(cpu, mem, nn)
-  result.dissasm = &"CALL {cc},{nn:#x}"
+  #result.dissasm = &"CALL {cc},{nn:#x}"
 
 op opRET, 4:
   cpu.pc = cpu.pop[:uint16](mem)
-  result.dissasm = &"RET"
+  #result.dissasm = &"RET"
 
 op opRETcc, 2: # 5
   let
@@ -289,12 +287,12 @@ op opRETcc, 2: # 5
       of jcC:  fCarry in cpu.flags
   if cond:
     cpu.pc = cpu.pop[:uint16](mem)
-  result.dissasm = &"RET {cc}"
+  #result.dissasm = &"RET {cc}"
 
 op opRETI, 4:
   cpu.pc = cpu.pop[:uint16](mem)
   cpu.ime = 1
-  result.dissasm = "RETI"
+  #result.dissasm = "RETI"
 
 op opRST, 4:
   const
@@ -303,7 +301,7 @@ op opRST, 4:
     rst = Address[(opcode and 0b00111000) shr 3]
   cpu.push(mem, cpu.pc)
   cpu.pc = rst
-  result.dissasm = "RST {rst:#x}"
+  #result.dissasm = "RST {rst:#x}"
 
 
 #[ 8bit load/store/move instructions ]#
@@ -312,130 +310,130 @@ op opLDr8r8, 1:
     xxx = (((opcode and 0b00111000) shr 3) + 2).Register8
     yyy = ((opcode and 0b00000111) + 2).Register8
   cpu[xxx] = cpu[yyy]
-  result.dissasm = &"LD {xxx},{yyy}"
+  #result.dissasm = &"LD {xxx},{yyy}"
 
 op opLDr8d8, 2:
   let
     xxx = (((opcode and 0b00111000) shr 3) + 2).Register8
   cpu[xxx] = cpu.readNext(mem)
-  result.dissasm = &"LD {xxx},{cpu[xxx]:#x}"
+  #result.dissasm = &"LD {xxx},{cpu[xxx]:#x}"
 
 op opLDr8HL, 2:
   let
     xxx = (((opcode and 0b00111000) shr 3) + 2).Register8
   cpu[xxx] = mem[cpu[rHL]]
-  result.dissasm = &"LD {xxx},(HL)"
+  #result.dissasm = &"LD {xxx},(HL)"
 
 op opLDpHLr8, 2:
   let
     xxx = ((opcode and 0b00000111) + 2).Register8
   mem[cpu[rHL]] = cpu[xxx]
-  result.dissasm = &"LD (HL),{xxx}"
+  #result.dissasm = &"LD (HL),{xxx}"
 
 op opLDpHLA, 2:
   mem[cpu[rHL]] = cpu[rA]
-  result.dissasm = "LD (HL),A"
+  #result.dissasm = "LD (HL),A"
 
 op opLDHLd8, 3:
   mem[cpu[rHL]] = cpu.readNext(mem)
-  result.dissasm = &"LD (HL),{mem[cpu[rHL]]:#x}"
+  #result.dissasm = &"LD (HL),{mem[cpu[rHL]]:#x}"
 
 op opLDAr8, 2:
   let
     yyy = ((opcode and 0b00000111) + 2).Register8
   cpu[rA] = cpu[yyy]
-  result.dissasm = &"LD A,{yyy}"
+  #result.dissasm = &"LD A,{yyy}"
 
 op opLDAA, 1:
   cpu[rA] = cpu[rA]
-  result.dissasm = "LD A,A"
+  #result.dissasm = "LD A,A"
 
 op opLDr8A, 1:
   let
     xxx = (((opcode and 0b00111000) shr 3) + 2).Register8
   cpu[xxx] = cpu[rA]
-  result.dissasm = &"LD {xxx},A"
+  #result.dissasm = &"LD {xxx},A"
 
 op opLDAHL, 2:
   cpu[rA] = mem[cpu[rHL]]
-  result.dissasm = "LD A,(HL)"
+  #result.dissasm = "LD A,(HL)"
 
 op opLDAu8, 2:
   cpu[rA] = cpu.readNext(mem)
-  result.dissasm = &"LD A,{cpu[rA]:#x}"
+  #result.dissasm = &"LD A,{cpu[rA]:#x}"
 
 op opLDABC, 2:
   cpu[rA] = mem[cpu[rBC]]
-  result.dissasm = "LD A,(BC)"
+  #result.dissasm = "LD A,(BC)"
 
 op opLDADE, 2:
   cpu[rA] = mem[cpu[rDE]]
-  result.dissasm = "LD A,(DE)"
+  #result.dissasm = "LD A,(DE)"
 
 op opLDBCA, 2:
   mem[cpu[rBC]] = cpu[rA]
-  result.dissasm = "LD (BC),A"
+  #result.dissasm = "LD (BC),A"
 
 op opLDDEA, 2:
   mem[cpu[rDE]] = cpu[rA]
-  result.dissasm = "LD (DE),A"
+  #result.dissasm = "LD (DE),A"
 
 op opLDAHLp, 2:
   cpu[rA] = mem[cpu[rHL]]
   cpu[rHL] = cpu[rHL] + 1
-  result.dissasm = "LD A,(HL+)"
+  #result.dissasm = "LD A,(HL+)"
 
 op opLDAHLm, 2:
   cpu[rA] = mem[cpu[rHL]]
   cpu[rHL] = cpu[rHL] - 1
-  result.dissasm = "LD A,(HL-)"
+  #result.dissasm = "LD A,(HL-)"
 
 op opLDHLpA, 2:
   mem[cpu[rHL]] = cpu[rA]
   cpu[rHL] = cpu[rHL] + 1
-  result.dissasm = "LD (HL+),A"
+  #result.dissasm = "LD (HL+),A"
 
 op opLDHLmA, 2:
   mem[cpu[rHL]] = cpu[rA]
   cpu[rHL] = cpu[rHL] - 1
-  result.dissasm = "LD (HL-),A"
+  #result.dissasm = "LD (HL-),A"
 
 op opLDpCA, 2:
   ## Put A into memory at address 0xff00 + C
   mem[0xff00'u16 + cpu[rC].uint16] = cpu[rA]
-  result.dissasm = "LD (C),A"
+  #result.dissasm = "LD (C),A"
 
 op opLDApC, 2:
   ## Put memory value at address 0xff00 + C into A
   cpu[rA] = mem[0xff00'u16 + cpu[rC].uint16]
-  result.dissasm = "LD A,(C)"
+  #result.dissasm = "LD A,(C)"
 
 op opLDHAu8, 3:
   ## Put memory value at address 0xff00 + u8 into A
   let
     u8 = cpu.readNext(mem)
   cpu[rA] = mem[0xff00'u16 + u8.uint16]
-  result.dissasm = &"LDH A,{u8:#x}"
+  #result.dissasm = &"LDH A,{u8:#x}"
 
 op opLDHu8A, 3:
   ## Put A into memory at address 0xff00 + u8
   let
     u8 = cpu.readNext(mem)
   mem[0xff00'u16 + u8.uint16] = cpu[rA]
-  result.dissasm = &"LDH {u8:#x},A"
+  #result.dissasm = &"LDH {u8:#x},A"
 
 op opLDAu16, 4:
   let
     u16 = cpu.nn(mem)
   cpu[rA] = mem[u16]
 
-  result.dissasm = &"LD A,({u16:#x})"
+  #result.dissasm = &"LD A,({u16:#x})"
 
 op opLDu16A, 4:
   let
     u16 = cpu.nn(mem)
   mem[u16] = cpu[rA]
-  result.dissasm = &"LD ({u16:#x}),A"
+  #result.dissasm = &"LD ({u16:#x}),A"
 
 
 #[ 16bit load/store/move instructions ]#
@@ -447,16 +445,16 @@ op opLDr16u16, 3:
     nn = cpu.nn(mem)
   if xx == 3:
     cpu.sp = nn
-    result.dissasm = &"LD SP,{nn:#x}"
+    #result.dissasm = &"LD SP,{nn:#x}"
   else:
     let
       r16 = (xx + 1).Register16
     cpu[r16] = nn
-    result.dissasm = &"LD {r16},{nn:#04x}"
+    #result.dissasm = &"LD {r16},{nn:#04x}"
 
 op opLDSPHL, 2:
   cpu.sp = cpu[rHL]
-  result.dissasm = "LD SP,HL"
+  #result.dissasm = "LD SP,HL"
 
 op opLDHLSPps8, 3:
   let
@@ -466,13 +464,13 @@ op opLDHLSPps8, 3:
   cpu.flags ?= (hasHalfCarryAdd(3, cpu.sp, s8), { fHalfCarry })
   cpu[rHL] = (cpu.sp.int + d8.int).uint16
   cpu.flags -= { fZero, fAddSub }
-  result.dissasm = &"LD HL,SP+{s8:#x}"
+  #result.dissasm = &"LD HL,SP+{s8:#x}"
 
 op opLDu16SP, 5:
   let
     nn = cpu.nn(mem)
   mem[nn] = cpu.sp
-  result.dissasm = &"LD {nn:#x},SP"
+  #result.dissasm = &"LD {nn:#x},SP"
 
 op opPOPr16, 3:
   let
@@ -484,7 +482,7 @@ op opPOPr16, 3:
   if r16 == rAF:
     # zero out the lower nibble of register f since it cannot be modified
     cpu[rF] = cpu[rF] and 0b11110000
-  result.dissasm = &"POP {r16}"
+  #result.dissasm = &"POP {r16}"
 
 op opPUSHr16, 4:
   let
@@ -492,12 +490,12 @@ op opPUSHr16, 4:
   assert xx in {0, 1, 2, 3}
   if xx == 3:
     cpu.push(mem, cpu[rAF])
-    result.dissasm = "PUSH A"
+    #result.dissasm = "PUSH A"
   else:
     let
       r16 = (xx + 1).Register16
     cpu.push(mem, cpu[r16])
-    result.dissasm = &"PUSH {r16}"
+    #result.dissasm = &"PUSH {r16}"
 
 
 #[ 8bit arithmetic/logical instructions ]#
@@ -510,21 +508,21 @@ op opXORr8, 1:
   let
     r8 = ((opcode and 0b00000111) + 2).Register8
   opXor(cpu, cpu[r8])
-  result.dissasm = &"XOR {r8}"
+  #result.dissasm = &"XOR {r8}"
 
 op opXORpHL, 2:
   opXor(cpu, mem[cpu[rHL]])
-  result.dissasm = "XOR (HL)"
+  #result.dissasm = "XOR (HL)"
 
 op opXORA, 1:
   opXor(cpu, cpu[rA])
-  result.dissasm = "XOR A"
+  #result.dissasm = "XOR A"
 
 op opXORd8, 2:
   let
     d8 = cpu.readNext(mem)
   opXor(cpu, d8)
-  result.dissasm = &"XOR {d8}"
+  #result.dissasm = &"XOR {d8}"
 
 func opInc(cpu: var Sm83State, mem: var Mcu, value: uint8): uint8 = 
   result = value + 1
@@ -536,15 +534,15 @@ op opINCr8, 1:
   let
     r8 = (((opcode and 0b00111000) shr 3) + 2).Register8
   cpu[r8] = cpu.opInc(mem, cpu[r8])
-  result.dissasm = &"INC {r8}"
+  #result.dissasm = &"INC {r8}"
 
 op opINCpHL, 3:
   mem[cpu[rHL]] = cpu.opInc(mem, mem[cpu[rHL]])
-  result.dissasm = &"INC HL"
+  #result.dissasm = &"INC HL"
 
 op opINCA, 1:
   cpu[rA] = cpu.opInc(mem, cpu[rA])
-  result.dissasm = &"INC A"
+  #result.dissasm = &"INC A"
 
 func opDec(cpu: var Sm83State, mem: var Mcu, value: uint8): uint8 = 
   result = value - 1
@@ -556,15 +554,15 @@ op opDECr8, 1:
   let
     r8 = (((opcode and 0b00111000) shr 3) + 2).Register8
   cpu[r8] = cpu.opDec(mem, cpu[r8])
-  result.dissasm = &"DEC {r8}"
+  #result.dissasm = &"DEC {r8}"
 
 op opDECpHL, 3:
   mem[cpu[rHL]] = cpu.opDec(mem, mem[cpu[rHL]])
-  result.dissasm = &"INC HL"
+  #result.dissasm = &"INC HL"
 
 op opDECA, 1:
   cpu[rA] = cpu.opDec(mem, cpu[rA])
-  result.dissasm = &"DEC A"
+  #result.dissasm = &"DEC A"
 
 func opCp(cpu: var Sm83State, value: uint8) =
   cpu.flags ?= (cpu[rA] < value, { fCarry })
@@ -578,21 +576,21 @@ op opCPr8, 1:
   let
     r8 = ((opcode and 0b00000111) + 2).Register8
   opCp(cpu, cpu[r8])
-  result.dissasm = &"CP {r8}"
+  #result.dissasm = &"CP {r8}"
 
 op opCPpHL, 2:
   opCp(cpu, mem[cpu[rHL]])
-  result.dissasm = &"CP (HL)"
+  #result.dissasm = &"CP (HL)"
 
 op opCPA, 1:
   opCp(cpu, cpu[rA])
-  result.dissasm = &"CP A"
+  #result.dissasm = &"CP A"
 
 op opCPu8, 2:
   let
     u8 = cpu.readNext(mem)
   opCp(cpu, u8)
-  result.dissasm = &"CP {u8:#x}"
+  #result.dissasm = &"CP {u8:#x}"
 
 func opSub(cpu: var Sm83State, value: uint8) =
   cpu.flags ?= (cpu[rA] < value, { fCarry })
@@ -605,21 +603,21 @@ op opSUBr8, 1:
   let
     r8 = ((opcode and 0b00000111) + 2).Register8
   opSub(cpu, cpu[r8])
-  result.dissasm = &"SUB {r8}"
+  #result.dissasm = &"SUB {r8}"
 
 op opSUBHL, 2:
   opSub(cpu, mem[cpu[rHL]])
-  result.dissasm = "SUB (HL)"
+  #result.dissasm = "SUB (HL)"
 
 op opSUBA, 1:
   opSub(cpu, cpu[rA])
-  result.dissasm = "SUB A"
+  #result.dissasm = "SUB A"
 
 op opSUBd8, 2:
   let
     d8 = cpu.readNext(mem)
   opSub(cpu, d8)
-  result.dissasm = &"SUB {d8}"
+  #result.dissasm = &"SUB {d8}"
 
 func opAdd(cpu: var Sm83State, value: uint8) =
   cpu.flags ?= (cpu[rA].int + value.int > uint8.high.int, { fCarry })
@@ -632,21 +630,21 @@ op opADDAr8, 1:
   let
     r8 = ((opcode and 0b00000111) + 2).Register8
   opAdd(cpu, cpu[r8])
-  result.dissasm = &"ADD A,{r8}"
+  #result.dissasm = &"ADD A,{r8}"
 
 op opADDAHL, 2:
   opAdd(cpu, mem[cpu[rHL]])
-  result.dissasm = &"ADD A,(HL)"
+  #result.dissasm = &"ADD A,(HL)"
 
 op opADDAA, 1:
   opAdd(cpu, cpu[rA])
-  result.dissasm = &"ADD A,A"
+  #result.dissasm = &"ADD A,A"
 
 op opADDAd8, 2:
   let
     d8 = cpu.readNext(mem)
   opAdd(cpu, d8)
-  result.dissasm = &"ADD A,{d8}"
+  #result.dissasm = &"ADD A,{d8}"
 
 func opOr(cpu: var Sm83State, mem: var Mcu, value: uint8) =
   cpu[rA] = cpu[rA] or value
@@ -657,26 +655,26 @@ op opORr8, 1:
   let
     r8 = ((opcode and 0b00000111) + 2).Register8
   opOr(cpu, mem, cpu[r8])
-  result.dissasm = &"OR {r8}"
+  #result.dissasm = &"OR {r8}"
 
 op opORpHL, 2:
   opOr(cpu, mem, mem[cpu[rHL]])
-  result.dissasm = &"OR (HL)"
+  #result.dissasm = &"OR (HL)"
 
 op opORA, 1:
   opOr(cpu, mem, cpu[rA])
-  result.dissasm = &"OR A"
+  #result.dissasm = &"OR A"
 
 op opORd8, 2:
   let
     d8 = cpu.readNext(mem)
   opOr(cpu, mem, d8)
-  result.dissasm = &"OR {d8}"
+  #result.dissasm = &"OR {d8}"
 
 op opCPL, 1:
   cpu[rA] = not cpu[rA]
   cpu.flags += { fAddSub, fHalfCarry }
-  result.dissasm = "CPL"
+  #result.dissasm = "CPL"
 
 func opAnd(cpu: var Sm83State, mem: var Mcu, value: uint8) =
   cpu[rA] = cpu[rA] and value
@@ -688,31 +686,31 @@ op opANDr8, 1:
   let
     r8 = ((opcode and 0b00000111) + 2).Register8
   opAnd(cpu, mem, cpu[r8])
-  result.dissasm = &"AND {r8}"
+  #result.dissasm = &"AND {r8}"
 
 op opANDpHL, 2:
   opAnd(cpu, mem, mem[cpu[rHL]])
-  result.dissasm = &"AND (HL)"
+  #result.dissasm = &"AND (HL)"
 
 op opANDA, 1:
   opAnd(cpu, mem, cpu[rA])
-  result.dissasm = &"AND A"
+  #result.dissasm = &"AND A"
 
 op opANDd8, 2:
   let
     d8 = cpu.readNext(mem)
   opAnd(cpu, mem, d8)
-  result.dissasm = &"AND {d8}"
+  #result.dissasm = &"AND {d8}"
 
 op opSCF, 1:
   cpu.flags -= { fAddSub, fHalfCarry }
   cpu.flags += { fCarry }
-  result.dissasm = &"SCF"
+  #result.dissasm = &"SCF"
 
 op opCCF, 1:
   cpu.flags -= { fAddSub, fHalfCarry }
   cpu.flags ?= (fCarry notin cpu.flags, { fCarry })
-  result.dissasm = &"CCF"
+  #result.dissasm = &"CCF"
 
 func opAdc(cpu: var Sm83State, value: uint8) =
   let
@@ -727,21 +725,21 @@ op opADCr8, 1:
   let
     r8 = ((opcode and 0b00000111) + 2).Register8
   opAdc(cpu, cpu[r8])
-  result.dissasm = &"ADC A,{r8}"
+  #result.dissasm = &"ADC A,{r8}"
 
 op opADCpHL, 2:
   opAdc(cpu, mem[cpu[rHL]])
-  result.dissasm = "ADC A,(HL)"
+  #result.dissasm = "ADC A,(HL)"
 
 op opADCA, 1:
   opAdc(cpu, cpu[rA])
-  result.dissasm = "ADC A,A"
+  #result.dissasm = "ADC A,A"
 
 op opADCd8, 1:
   let
     n = cpu.readNext(mem)
   opAdc(cpu, n)
-  result.dissasm = &"ADC A,{n}"
+  #result.dissasm = &"ADC A,{n}"
 
 func opSbc(cpu: var Sm83State, value: uint8) =
   let
@@ -756,21 +754,21 @@ op opSBCr8, 1:
   let
     r8 = ((opcode and 0b00000111) + 2).Register8
   opSbc(cpu, cpu[r8])
-  result.dissasm = &"SDC A,{r8}"
+  #result.dissasm = &"SDC A,{r8}"
 
 op opSBCpHL, 2:
   opSbc(cpu, mem[cpu[rHL]])
-  result.dissasm = "SDC A,(HL)"
+  #result.dissasm = "SDC A,(HL)"
 
 op opSBCA, 1:
   opSbc(cpu, cpu[rA])
-  result.dissasm = "SDC A,A"
+  #result.dissasm = "SDC A,A"
 
 op opSBCd8, 1:
   let
     n = cpu.readNext(mem)
   opSbc(cpu, n)
-  result.dissasm = &"SDC A,{n}"
+  #result.dissasm = &"SDC A,{n}"
 
 op opDAA, 1:
   # from: http://forums.nesdev.com/viewtopic.php?f=20&t=15944#p196282
@@ -792,7 +790,7 @@ op opDAA, 1:
   # these flags are always updated
   cpu.flags ?= (cpu[rA] == 0, { fZero }) # the usual z flag
   cpu.flags -= { fHalfCarry } # h flag is always cleared
-  result.dissasm = "DAA"
+  #result.dissasm = "DAA"
 
 
 #[ 16bit arithmetic/logical instructions ]#
@@ -800,21 +798,21 @@ op opINCr16, 2:
   let
     r16 = (((opcode and 0b00110000) shr 4) + 1).Register16
   cpu[r16] = cpu[r16] + 1
-  result.dissasm = &"INC {r16}"
+  #result.dissasm = &"INC {r16}"
 
 op opINCSP, 2:
   cpu.sp = cpu.sp + 1
-  result.dissasm = &"INC SP"
+  #result.dissasm = &"INC SP"
 
 op opDECr16, 2:
   let
     r16 = (((opcode and 0b00110000) shr 4) + 1).Register16
   cpu[r16] = cpu[r16] - 1
-  result.dissasm = &"DEC {r16}"
+  #result.dissasm = &"DEC {r16}"
 
 op opDECSP, 2:
   cpu.sp = cpu.sp - 1
-  result.dissasm = &"DEC SP"
+  #result.dissasm = &"DEC SP"
 
 func opAddHl(cpu: var Sm83State, value: uint16) =
   cpu.flags ?= (cpu[rHL] > uint16.high - value, { fCarry })
@@ -826,11 +824,11 @@ op opADDHLr16, 2:
   let
     r16 = (((opcode and 0b00110000) shr 4) + 1).Register16
   opAddHl(cpu, cpu[r16])
-  result.dissasm = &"ADD HL,{r16}"
+  #result.dissasm = &"ADD HL,{r16}"
 
 op opADDHLSP, 2:
   opAddHl(cpu, cpu.sp)
-  result.dissasm = "ADD HL,SP"
+  #result.dissasm = "ADD HL,SP"
 
 op opADDSPs8, 2:
   let
@@ -840,7 +838,7 @@ op opADDSPs8, 2:
   cpu.flags ?= (hasHalfCarryAdd(3, cpu.sp, s8), { fHalfCarry })
   cpu.sp = (cpu.sp.int + d8.int).uint16
   cpu.flags -= { fZero, fAddSub }
-  result.dissasm = &"ADD SP,{s8}"
+  #result.dissasm = &"ADD SP,{s8}"
 
 
 #[ 8bit rotations/shifts and bit instructions ]#
@@ -856,20 +854,20 @@ op opRLCr8, 2:
   let
     r8 = ((opcode and 0b00000111) + 2).Register8
   cpu[r8] = opRlc(cpu, cpu[r8])
-  result.dissasm = &"RLC {r8}"
+  #result.dissasm = &"RLC {r8}"
 
 op opRLCpHL, 4:
   mem[cpu[rHL]] = opRlc(cpu, mem[cpu[rHL]])
-  result.dissasm = &"RLC (HL)"
+  #result.dissasm = &"RLC (HL)"
 
 op opRLCA, 1:
   cpu[rA] = opRlc(cpu, cpu[rA])
   cpu.flags -= { fZero }
-  result.dissasm = &"RLC A"
+  #result.dissasm = &"RLC A"
 
 op opCBRLCA, 2:
   cpu[rA] = opRlc(cpu, cpu[rA])
-  result.dissasm = &"RLC A"
+  #result.dissasm = &"RLC A"
 
 func opRl(cpu: var Sm83State, value: uint8): uint8 =
   let
@@ -885,20 +883,20 @@ op opRLr8, 2:
   let
     r8 = ((opcode and 0b00000111) + 2).Register8
   cpu[r8] = opRl(cpu, cpu[r8])
-  result.dissasm = &"RL {r8}"
+  #result.dissasm = &"RL {r8}"
 
 op opRLpHL, 4:
   mem[cpu[rHL]] = opRl(cpu, mem[cpu[rHL]])
-  result.dissasm = &"RL (HL)"
+  #result.dissasm = &"RL (HL)"
 
 op opRLA, 1:
   cpu[rA] = opRl(cpu, cpu[rA])
   cpu.flags -= { fZero }
-  result.dissasm = &"RL A"
+  #result.dissasm = &"RL A"
 
 op opCBRLA, 2:
   cpu[rA] = opRl(cpu, cpu[rA])
-  result.dissasm = &"RL A"
+  #result.dissasm = &"RL A"
 
 func opSla(cpu: var Sm83State, value: uint8): uint8 =
   let
@@ -912,15 +910,15 @@ op opSLAr8, 2:
   let
     r8 = ((opcode and 0b00000111) + 2).Register8
   cpu[r8] = opSla(cpu, cpu[r8])
-  result.dissasm = &"SLA {r8}"
+  #result.dissasm = &"SLA {r8}"
 
 op opSLApHL, 4:
   mem[cpu[rHL]] = opSla(cpu, mem[cpu[rHL]])
-  result.dissasm = &"SLA (HL)"
+  #result.dissasm = &"SLA (HL)"
 
 op opSLAA, 2:
   cpu[rA] = opSla(cpu, cpu[rA])
-  result.dissasm = &"SLA A"
+  #result.dissasm = &"SLA A"
 
 func opBit(cpu: var Sm83State, bit: range[0..7], value: uint8) =
   cpu.flags ?= (not testBit(value, bit.int), { fZero })
@@ -932,19 +930,19 @@ op opBITr8, 2:
     bit = opcode.bit
     r8 = ((opcode and 0b00000111) + 2).Register8
   opBit(cpu, bit, cpu[r8])
-  result.dissasm = &"BIT {bit},{r8}"
+  #result.dissasm = &"BIT {bit},{r8}"
 
 op opBITpHL, 4:
   let
     bit = opcode.bit
   opBit(cpu, bit, mem[cpu[rHL]])
-  result.dissasm = &"BIT {bit},(HL)"
+  #result.dissasm = &"BIT {bit},(HL)"
 
 op opBITA, 2:
   let
     bit = opcode.bit
   opBit(cpu, bit, cpu[rA])
-  result.dissasm = &"BIT {bit},A"
+  #result.dissasm = &"BIT {bit},A"
 
 func opSet(bit: range[0..7], value: uint8): uint8 =
   result = value
@@ -955,19 +953,19 @@ op opSETbr8, 2:
     bit = opcode.bit
     r8 = ((opcode and 0b00000111) + 2).Register8
   cpu[r8] = opSet(bit, cpu[r8])
-  result.dissasm = &"SET {bit},{r8}"
+  #result.dissasm = &"SET {bit},{r8}"
 
 op opSETbpHL, 2:
   let
     bit = opcode.bit
   mem[cpu[rHL]] = opSet(bit, mem[cpu[rHL]])
-  result.dissasm = &"SET {bit},(HL)"
+  #result.dissasm = &"SET {bit},(HL)"
 
 op opSETbA, 2:
   let
     bit = opcode.bit
   cpu[rA] = opSet(bit, cpu[rA])
-  result.dissasm = &"SET {bit},A"
+  #result.dissasm = &"SET {bit},A"
 
 func opRes(bit: range[0..7], value: uint8): uint8 =
   result = value
@@ -978,19 +976,19 @@ op opRESbr8, 2:
     bit = opcode.bit
     r8 = ((opcode and 0b00000111) + 2).Register8
   cpu[r8] = opRes(bit, cpu[r8])
-  result.dissasm = &"RES {bit},{r8}"
+  #result.dissasm = &"RES {bit},{r8}"
 
 op opRESbpHL, 2:
   let
     bit = opcode.bit
   mem[cpu[rHL]] = opRes(bit, mem[cpu[rHL]])
-  result.dissasm = &"RES {bit},(HL)"
+  #result.dissasm = &"RES {bit},(HL)"
 
 op opRESbA, 2:
   let
     bit = opcode.bit
   cpu[rA] = opRes(bit, cpu[rA])
-  result.dissasm = &"RES {bit},A"
+  #result.dissasm = &"RES {bit},A"
 
 func opSwap(cpu: var Sm83State, value: uint8): uint8 =
   result = ((value and 0x0f) shl 4) or ((value and 0xf0) shr 4)
@@ -1001,15 +999,15 @@ op opSWAPr8, 2:
   let
     r8 = ((opcode and 0b00000111) + 2).Register8
   cpu[r8] = opSwap(cpu, cpu[r8])
-  result.dissasm = &"SWAP {r8}"
+  #result.dissasm = &"SWAP {r8}"
 
 op opSWAPpHL, 4:
   mem[cpu[rHL]] = opSwap(cpu, mem[cpu[rHL]])
-  result.dissasm = &"SWAP (HL)"
+  #result.dissasm = &"SWAP (HL)"
 
 op opSWAPA, 2:
   cpu[rA] = opSwap(cpu, cpu[rA])
-  result.dissasm = &"SWAP A"
+  #result.dissasm = &"SWAP A"
 
 func opRrc(cpu: var Sm83State, value: uint8): uint8 =
   let
@@ -1025,20 +1023,20 @@ op opRRCr8, 2:
   let
     r8 = ((opcode and 0b00000111) + 2).Register8
   cpu[r8] = opRrc(cpu, cpu[r8])
-  result.dissasm = &"RRC {r8}"
+  #result.dissasm = &"RRC {r8}"
 
 op opRRCpHL, 4:
   mem[cpu[rHL]] = opRrc(cpu, mem[cpu[rHL]])
-  result.dissasm = &"RRC (HL)"
+  #result.dissasm = &"RRC (HL)"
 
 op opRRCA, 1:
   cpu[rA] = opRrc(cpu, cpu[rA])
   cpu.flags -= { fZero }
-  result.dissasm = &"RRC A"
+  #result.dissasm = &"RRC A"
 
 op opCBRRCA, 2:
   cpu[rA] = opRrc(cpu, cpu[rA])
-  result.dissasm = &"RRC A"
+  #result.dissasm = &"RRC A"
 
 func opRr(cpu: var Sm83State, value: uint8): uint8 =
   let
@@ -1054,20 +1052,20 @@ op opRRr8, 2:
   let
     r8 = ((opcode and 0b00000111) + 2).Register8
   cpu[r8] = opRr(cpu, cpu[r8])
-  result.dissasm = &"RR {r8}"
+  #result.dissasm = &"RR {r8}"
 
 op opRRpHL, 4:
   mem[cpu[rHL]] = opRr(cpu, mem[cpu[rHL]])
-  result.dissasm = &"RR (HL)"
+  #result.dissasm = &"RR (HL)"
 
 op opRRA, 1:
   cpu[rA] = opRr(cpu, cpu[rA])
   cpu.flags -= { fZero }
-  result.dissasm = &"RR A"
+  #result.dissasm = &"RR A"
 
 op opCBRRA, 2:
   cpu[rA] = opRr(cpu, cpu[rA])
-  result.dissasm = &"RR A"
+  #result.dissasm = &"RR A"
 
 func opSra(cpu: var Sm83State, value: uint8): uint8 =
   let
@@ -1082,15 +1080,15 @@ op opSRAr8, 2:
   let
     r8 = ((opcode and 0b00000111) + 2).Register8
   cpu[r8] = opSra(cpu, cpu[r8])
-  result.dissasm = &"SRA {r8}"
+  #result.dissasm = &"SRA {r8}"
 
 op opSRApHL, 4:
   mem[cpu[rHL]] = opSra(cpu, mem[cpu[rHL]])
-  result.dissasm = &"SRA (HL)"
+  #result.dissasm = &"SRA (HL)"
 
 op opSRAA, 2:
   cpu[rA] = opSra(cpu, cpu[rA])
-  result.dissasm = &"SRA A"
+  #result.dissasm = &"SRA A"
 
 func opSrl(cpu: var Sm83State, value: uint8): uint8 =
   let
@@ -1104,15 +1102,15 @@ op opSRLr8, 2:
   let
     r8 = ((opcode and 0b00000111) + 2).Register8
   cpu[r8] = opSrl(cpu, cpu[r8])
-  result.dissasm = &"SRL {r8}"
+  #result.dissasm = &"SRL {r8}"
 
 op opSRLpHL, 4:
   mem[cpu[rHL]] = opSrl(cpu, mem[cpu[rHL]])
-  result.dissasm = &"SRL (HL)"
+  #result.dissasm = &"SRL (HL)"
 
 op opSRLA, 2:
   cpu[rA] = opSrl(cpu, cpu[rA])
-  result.dissasm = &"SRL A"
+  #result.dissasm = &"SRL A"
 
 
 const
@@ -1138,17 +1136,17 @@ const
 
 #[ Misc/control instructions ]#
 op opNOP, 1:
-  result.dissasm = "NOP"
+  #result.dissasm = "NOP"
   discard
 
 op opSTOP, 1:
   # TODO
-  result.dissasm = "STOP"
-  #raise newException(Exception, "Not implemented opcode: " & opcode.int.toHex(2))
+  #result.dissasm = "STOP"
+  discard
 
 op opHALT, 1:
   cpu.status += { sfHalted }
-  result.dissasm = "HALT"
+  #result.dissasm = "HALT"
 
 op opPreCB, 1:
   let
@@ -1159,12 +1157,12 @@ op opPreCB, 1:
 op opDI, 1:
   ## Disable interrupt handling (ime = 0) after the next instruction
   cpu.status += { sfInterruptWait, sfInterruptDisable }
-  result.dissasm = "DI"
+  #result.dissasm = "DI"
 
 op opEI, 1:
   ## Enable interrupt handling (ime = 1) after the next instruction
   cpu.status += { sfInterruptWait, sfInterruptEnable }
-  result.dissasm = "EI"
+  #result.dissasm = "EI"
 
 const
   OpcodeTable: array[256, InstructionDefinition] = [
