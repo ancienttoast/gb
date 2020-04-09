@@ -37,6 +37,9 @@ func setBit*[T: uint8 | uint16 | int](value: var T, bit: static[int]) =
     Mask = 1.T shl bit
   value = value or Mask
 
+func getBit*[T: uint8 | uint16 | int](value: T, bit: int): T =
+  (value shr bit) and 0b00000001
+
 func clearBit*[T: uint8 | uint16 | int](value: var T, bit: static[int]) =
   const
     Mask = 1.T shl bit

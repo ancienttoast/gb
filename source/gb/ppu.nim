@@ -149,7 +149,7 @@ type
 
   Ppu* = ref object
     state*: PpuState
-    buffer*: array[Width, array[Height, PpuGrayShade]]
+    buffer*: array[Height, array[Width, PpuGrayShade]]
     mcu: Mcu
 
 
@@ -200,24 +200,18 @@ iterator tileLine(state: PpuState, tileNum: uint8, line: int, palette: uint8, st
     b0 = state.vram[baseAddress]
     b1 = state.vram[baseAddress + 1]
   for j in countdown(7 - start, 0):
-    var
-      c = 0
-    if b0.testBit(j):
-      c.setBit(0)
-    if b1.testBit(j):
-      c.setBit(1)
+    let
+      c = (b1.getBit(j) shl 1) or b0.getBit(j)
     yield palette.shade(c)
 
-iterator bgLine*(state: PpuState, line: int): tuple[x: int, shade: PpuGrayShade] =
+iterator bgLine*(state: PpuState, x, y: int, width: int): tuple[x: int, shade: PpuGrayShade] =
   let
     mapAddress = state.io.bgMapAddress().int - VramStartAddress
-    x = state.io.scx.int
-    y = state.io.scy.int + line
+    tileY = (y div 8).wrap32
+    startY = y mod 8
   var
     tileX = x div 8
-    tileY = (y div 8).wrap32
     startX = x mod 8
-    startY = y mod 8
   block main:
     var
       col = 0
@@ -228,7 +222,7 @@ iterator bgLine*(state: PpuState, line: int): tuple[x: int, shade: PpuGrayShade]
       for shade in state.tileLine(tileNum, startY, state.io.bgp, startX):
         yield (x: col, shade: shade)
         col += 1
-        if col == Width:
+        if col == width:
           break main
       tileX = (tileX + 1).wrap32
       startX = 0
@@ -253,8 +247,8 @@ proc step*(self: Ppu): bool {.discardable.} =
     of 80:
       # mDataTransfer: start
       self.state.io.mode = mDataTransfer
-      for x, shade in self.state.bgLine(self.state.io.ly.int):
-        self.buffer[x][self.state.io.ly.int] = shade
+      for x, shade in self.state.bgLine(self.state.io.scx.int, self.state.io.scy.int + self.state.io.ly.int, Width):
+        self.buffer[self.state.io.ly.int][x] = shade
     of 81..247:
       # mDataTransfer
       discard
@@ -351,30 +345,6 @@ proc renderTiles*(self: Ppu, b: range[0..2]): Image[ColorRGBU] =
         tileImage = self.bgTile(b*128 + (x + y*16))
       result.blit(tileImage, x*8, y*8)
 
-proc renderBackground*(self: Ppu, drawGrid = true): Image[ColorRGBU] =
-  let
-    mapAddress = self.state.io.bgMapAddress()
-  result = initImage[ColorRGBU](256, 256)
-  for y in 0..<MapSize:
-    for x in 0..<MapSize:
-      let
-        tilePos = (mapAddress.int + y*MapSize + x).MemAddress
-        tileNum = self.mcu[tilePos].int
-        tileImage = self.bgTile(tileNum)
-      result.blit(tileImage, x*8, y*8)
-  let
-    min0 = [ self.state.io.scx.int, self.state.io.scy.int ]
-    max0 = [ self.state.io.scx.int + 160, self.state.io.scy.int + 144 ]
-  result.drawLine(max(0, min0[0]), max(0, min0[1]), min(255, min0[0]), min(255, max0[1]), [255'u8, 0, 0].ColorRGBU)
-  result.drawLine(max(0, min0[0]), max(0, min0[1]), min(255, max0[0]), min(255, min0[1]), [255'u8, 0, 0].ColorRGBU)
-
-  if drawGrid:
-    for x in 1..<MapSize:
-      result.drawLine(x*8, 0, x*8, result.height - 1, [0'u8, 255, 0].ColorRGBU)
-    for y in 1..<MapSize:
-      result.drawLine(0, y*8, result.width - 1, y*8, [0'u8, 255, 0].ColorRGBU)
-
-
 proc renderSprites*(self: Ppu): Image[ColorRGBU] =
   result = initImage[ColorRGBU](Width, Height)
   for sprite in self.state.oam:
@@ -392,8 +362,30 @@ proc renderSprites*(self: Ppu): Image[ColorRGBU] =
     if sprite.isYFlipped: tileImage = tileImage.flippedVert()
     result.blit(tileImage, x, y)
 
+
+
+proc renderBackground*(self: Ppu, drawGrid = true): Image[ColorRGBU] =
+  let
+    w = MapSize*8
+    h = MapSize*8
+  result = initImage[ColorRGBU](w, h)
+  for y in 0..<h:
+    for x, shade in bgLine(self.state, 0, y, w):
+      result[x, y] = Colors[shade]
+  let
+    min0 = [ self.state.io.scx.int, self.state.io.scy.int ]
+    max0 = [ self.state.io.scx.int + 160, self.state.io.scy.int + 144 ]
+  result.drawLine(max(0, min0[0]), max(0, min0[1]), min(255, min0[0]), min(255, max0[1]), [255'u8, 0, 0].ColorRGBU)
+  result.drawLine(max(0, min0[0]), max(0, min0[1]), min(255, max0[0]), min(255, min0[1]), [255'u8, 0, 0].ColorRGBU)
+
+  if drawGrid:
+    for x in 1..<MapSize:
+      result.drawLine(x*8, 0, x*8, result.height - 1, [0'u8, 255, 0].ColorRGBU)
+    for y in 1..<MapSize:
+      result.drawLine(0, y*8, result.width - 1, y*8, [0'u8, 255, 0].ColorRGBU)
+
 proc renderLcd*(self: Ppu): Image[ColorRGBU] =
   result = initImage[ColorRGBU](Width, Height)
   for y in 0..<Height:
     for x in 0..<Width:
-      result[x, y] = Colors[self.buffer[x][y]]
+      result[x, y] = Colors[self.buffer[y][x]]
