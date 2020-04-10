@@ -23,6 +23,9 @@
 ]##
 
 
+const
+  MbcRom* = 0x0000'u16..0x7fff'u16
+  MbcRam* = 0xa000'u16..0xbfff'u16
 
 type
   MemAddress* = uint16
