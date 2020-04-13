@@ -116,11 +116,9 @@ type
                       ##     bit 5-4 - _PpuGrayShades_ for color number 2
                       ##     bit 3-2 - _PpuGrayShades_ for color number 1
                       ##     bit 1-0 - _PpuGrayShades_ for color number 0
-    obp0:     uint8   ## 0xff48  Object Palette 0 Data (R/W) [DMG Only]
-                      ##   Color number _PpuGrayShades_ translation sprite palette 0.
-                      ##   Works exactly as _bgp_, except color number 0 is transparent.
-    obp1:     uint8   ## 0xff48  Object Palette 1 Data (R/W) [DMG Only]
-                      ##   Color number _PpuGrayShades_ translation sprite palette 1.
+    obp:     array[2, uint8]
+                      ## 0xff48  Object Palette Data (R/W) [DMG Only]
+                      ##   Color number _PpuGrayShades_ translation sprite palette.
                       ##   Works exactly as _bgp_, except color number 0 is transparent.
     unk2:     array[6, uint8]
 
@@ -186,20 +184,29 @@ func isXFlipped(sprite: PpuSpriteAttribute): bool =
 func isYFlipped(sprite: PpuSpriteAttribute): bool =
   testBit(sprite.flags, 6)
 
+func palette(sprite: PpuSpriteAttribute): int =
+  getBit(sprite.flags, 4).int
 
-func tileAddress(state: PpuState, tileNum: uint8): int =
+func isVisible(sprite: PpuSpriteAttribute): bool =
+  not (sprite.x == 0 or sprite.x >= 160'u8 or sprite.y == 0 or sprite.y >= 168'u8)
+
+
+func bgTileAddress(state: PpuState, tileNum: uint8): int =
   if state.io.bgTileAddress().int == 0x8000:
     state.io.bgTileAddress().int + tileNum.int*16
   else:
     0x9000 + (cast[int8](tileNum)).int*16
 
-iterator tileLine(state: PpuState, tileNum: uint8, line: int, palette: uint8, start = 0): PpuGrayShade =
+func objTileAddress(state: PpuState, tileNum: uint8): int =
+  0x8000 + tileNum.int*16
+
+iterator tileLine(state: PpuState, tileAddress: int, line: int, palette: uint8, start = 0, flipX = false): PpuGrayShade =
   let
-    tileAddress = state.tileAddress(tileNum)
     baseAddress = (tileAddress - VramStartAddress) + (line*2)
     b0 = state.vram[baseAddress]
     b1 = state.vram[baseAddress + 1]
-  for j in countdown(7 - start, 0):
+    (a, b) = if flipX: (start, 7) else: (7 - start, 0)
+  for j in count(a, b):
     let
       c = (b1.getBit(j) shl 1) or b0.getBit(j)
     yield palette.shade(c)
@@ -219,13 +226,39 @@ iterator bgLine*(state: PpuState, x, y: int, width: int): tuple[x: int, shade: P
       let
         tile = tileY*MapSize + tileX
         tileNum = state.vram[mapAddress + tile]
-      for shade in state.tileLine(tileNum, startY, state.io.bgp, startX):
+        tileAddress = state.bgTileAddress(tileNum)
+      for shade in state.tileLine(tileAddress, startY, state.io.bgp, startX):
         yield (x: col, shade: shade)
         col += 1
         if col == width:
           break main
       tileX = (tileX + 1).wrap32
       startX = 0
+
+iterator objLine*(state: PpuState, x, y: int, width: int): tuple[x: int, shade: PpuGrayShade] =
+  for sprite in state.oam:
+    if not sprite.isVisible:
+      continue
+
+    let
+      sx = sprite.x.int - 8
+      sy = sprite.y.int - 16
+    if not(y in sy ..< sy+(if state.io.spriteSize: 16 else: 8)) or sx+8 < x or sx >= x+width:
+      continue
+
+    # TODO: handle sprite OBJ-to-BG Priority
+    let
+      f = max(x, sx)
+      t = min(x+width, sx+8)
+    var
+      line = 7 - (sy - y + 7)
+    if sprite.isYFlipped: line = 7 - line
+    var i = f
+    for shade in state.tileLine(state.objTileAddress(sprite.tile), line, state.io.obp[sprite.palette], f - sx, sprite.isXFlipped):
+      yield (x: i, shade: shade)
+      i += 1
+      if i == t:
+        break
 
 proc step*(self: Ppu): bool {.discardable.} =
   self.state.timer += 1
@@ -249,6 +282,10 @@ proc step*(self: Ppu): bool {.discardable.} =
       self.state.io.mode = mDataTransfer
       for x, shade in self.state.bgLine(self.state.io.scx.int, self.state.io.scy.int + self.state.io.ly.int, Width):
         self.buffer[self.state.io.ly.int][x] = shade
+
+      for x, shade in self.state.objLine(0, self.state.io.ly.int, Width):
+        if shade != gsWhite:
+          self.buffer[self.state.io.ly.int][x] = shade
     of 81..247:
       # mDataTransfer
       discard
@@ -334,7 +371,7 @@ proc tile(self: Ppu, tileAddress: int, gbPalette: uint8): Image[ColorRGBU] =
 
 proc bgTile*(self: Ppu, tileNum: int): Image[ColorRGBU] =
   let
-    tilePos = self.state.tileAddress(tileNum.uint8)
+    tilePos = self.state.bgTileAddress(tileNum.uint8)
   self.tile(tilePos, self.state.io.bgp)
 
 proc renderTiles*(self: Ppu, b: range[0..2]): Image[ColorRGBU] =
@@ -383,6 +420,14 @@ proc renderBackground*(self: Ppu, drawGrid = true): Image[ColorRGBU] =
       result.drawLine(x*8, 0, x*8, result.height - 1, [0'u8, 255, 0].ColorRGBU)
     for y in 1..<MapSize:
       result.drawLine(0, y*8, result.width - 1, y*8, [0'u8, 255, 0].ColorRGBU)
+
+#[
+proc renderSprites*(self: Ppu): Image[ColorRGBU] =
+  result = initImage[ColorRGBU](Width, Height)
+  for y in 0..<Height:
+    for x, shade in self.state.objLine(0, y, Width):
+      result[x, y] = Colors[shade]
+]#
 
 proc renderLcd*(self: Ppu): Image[ColorRGBU] =
   result = initImage[ColorRGBU](Width, Height)

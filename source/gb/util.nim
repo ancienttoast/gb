@@ -49,3 +49,11 @@ func testBit*[T: uint8 | uint16 | int](value: T, bit: static[int]): bool =
   const
     Mask = 1.T shl bit
   (value and Mask) == Mask
+
+
+
+iterator count*(a, b: int): int =
+  if a < b:
+    for i in a..b: yield i
+  else:
+    for i in countdown(a, b): yield i
