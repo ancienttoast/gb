@@ -179,14 +179,14 @@ func `mode=`(self: var PpuIoState, mode: PpuMode) =
   self.stat = self.stat or mode.ord.uint8
 
 
-func isXFlipped(sprite: PpuSpriteAttribute): bool =
+func palette*(sprite: PpuSpriteAttribute): int =
+  getBit(sprite.flags, 4).int
+
+func isXFlipped*(sprite: PpuSpriteAttribute): bool =
   testBit(sprite.flags, 5)
 
-func isYFlipped(sprite: PpuSpriteAttribute): bool =
+func isYFlipped*(sprite: PpuSpriteAttribute): bool =
   testBit(sprite.flags, 6)
-
-func palette(sprite: PpuSpriteAttribute): int =
-  getBit(sprite.flags, 4).int
 
 func isVisible(sprite: PpuSpriteAttribute): bool =
   not (sprite.x == 0 or sprite.x >= 160'u8 or sprite.y == 0 or sprite.y >= 168'u8)

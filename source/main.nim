@@ -236,30 +236,69 @@ proc main() =
               igImage(cast[pointer](tileMapTextures[i].texture), ImVec2(x: tileMapTextures[i].width.float32 * 2, y: tileMapTextures[i].height.float32 * 2))
             igEndTabItem()
           if igBeginTabItem("OAM"):
+            var
+              selected = 0
             let
               oams = gameboy.ppu.state.oam
-            igColumns(8, "oam", true)
-            var
-              col = 0
             for i, oam in oams:
+              if igBeginChild("oam" & $i, ImVec2(x: igGetWindowContentRegionWidth() / 9, y: 80), true, ImGuiWindowFlags.NoScrollbar):
+                if igIsWindowHovered():
+                  selected = i
+                let
+                  tile = gameboy.ppu.bgTile(oam.tile.int)
+                oamTextures[i].upload(tile)
+                igImage(cast[pointer](oamTextures[i].texture), ImVec2(x: oamTextures[i].width.float32 * 2, y: oamTextures[i].height.float32 * 2))
+                igSameLine()
+                igBeginGroup()
+                igText(&"{oam.y:#04x}")
+                igText(&"{oam.x:#04x}")
+                igText(&"{oam.tile:#04x}")
+                igText(&"{oam.flags:#04x}")
+                igEndGroup()
+              igEndChild()
+
+              if (i + 1) mod 8 != 0:
+                igSameLine()
+            
+            igBeginGroup()
+            block:
               let
-                tile = gameboy.ppu.bgTile(oam.tile.int)
-              oamTextures[i].upload(tile)
-              igImage(cast[pointer](oamTextures[i].texture), ImVec2(x: oamTextures[i].width.float32 * 2, y: oamTextures[i].height.float32 * 2))
+                oam = oams[selected]
+              igImage(cast[pointer](oamTextures[selected].texture), ImVec2(x: oamTextures[selected].width.float32 * 11, y: oamTextures[selected].height.float32 * 11))
+
               igSameLine()
+
               igBeginGroup()
-              igText(&"{oam.y:#04x}")
-              igText(&"{oam.x:#04x}")
-              igText(&"{oam.tile:#04x}")
-              igText(&"{oam.flags:#04x}")
+              block:
+                igTextDisabled("Flags  ")
+                igSameLine()
+                igText(&"{oam.flags:08b}")
+
+                igTextDisabled("   Flip x    ")
+                igSameLine()
+                igText($oam.isXFlipped)
+                igTextDisabled("   Flip y    ")
+                igSameLine()
+                igText($oam.isYFlipped)
+
+                igTextDisabled("   Palette   ")
+                igSameLine()
+                igText($oam.palette)
               igEndGroup()
 
-              igNextColumn()
+              igSameLine()
 
-              col += 1
-              if col >= 8 and i < 39:
-                col = 0
-                igSeparator()
+              igBeginGroup()
+              block:
+                igTextDisabled("Position  ")
+                igSameLine()
+                igText(&"{oam.x - 8:3}x{oam.y - 16:3}")
+                igTextDisabled("Tile      ")
+                igSameLine()
+                igText(&"{oam.tile:3} ({0x8000 + oam.tile*16:#06x})")
+              igEndGroup()
+            igEndGroup()
+            
             igEndTabItem()
           igEndTabBar()
       igEnd()
