@@ -189,7 +189,7 @@ func isYFlipped*(sprite: PpuSpriteAttribute): bool =
   testBit(sprite.flags, 6)
 
 func isVisible(sprite: PpuSpriteAttribute): bool =
-  not (sprite.x == 0 or sprite.x >= 160'u8 or sprite.y == 0 or sprite.y >= 168'u8)
+  not (sprite.x == 0 or sprite.x >= 168'u8 or sprite.y == 0 or sprite.y >= 168'u8)
 
 
 func bgTileAddress(state: PpuState, tileNum: uint8): int =
@@ -244,7 +244,7 @@ iterator objLine*(state: PpuState, x, y: int, width: int): tuple[x: int, shade: 
     let
       sx = sprite.x.int - 8
       sy = sprite.y.int - 16
-    if not(y in sy ..< sy+(if state.io.spriteSize: 16 else: 8)) or sx+8 < x or sx >= x+width:
+    if not(y in sy ..< sy+(if state.io.spriteSize: 16 else: 8))or sx+8 < x or sx >= x+width:
       continue
 
     # TODO: handle sprite OBJ-to-BG Priority
