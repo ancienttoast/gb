@@ -144,6 +144,7 @@ type
     oam: PpuOam
     timer: range[0..457]
     stateIR: bool
+    dma: uint16
 
   Ppu* = ref object
     state*: PpuState
@@ -315,17 +316,17 @@ proc step*(self: Ppu): bool {.discardable.} =
     self.mcu.raiseInterrupt(iLcdStat)
   self.state.stateIR = stat
 
+  if (self.state.dma and 0x00ff) <= 0x009f:
+    self.mcu[(OamStartAddress.uint16 + (self.state.dma and 0x00ff)).MemAddress] = self.mcu[self.state.dma]
+    self.state.dma += 1
+
 
 proc pushHandler*(mcu: Mcu, self: Ppu) =
   let
     dmaHandler = MemHandler(
       read: proc(address: MemAddress): uint8 = 0,
       write: proc(address: MemAddress, value: uint8) =
-        # TODO: this should take 160 cycles
-        let
-          source = value.uint16 shl 8
-        for i in 0.uint16 ..< PpuOam.sizeof.uint16:
-          mcu[(OamStartAddress.uint16 + i).MemAddress] = mcu[(source + i).MemAddress]
+        self.state.dma = value.uint16 shl 8
       ,
       area: 0xff46.MemAddress..0xff46.MemAddress
     )
