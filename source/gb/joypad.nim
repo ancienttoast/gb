@@ -68,5 +68,8 @@ proc newJoypad*(mcu: Mcu): Joypad =
   result = Joypad()
   mcu.pushHandler(result)
 
-proc setKey*(self: Joypad, key: JoypadKey, state: bool) =
+proc setKeyState*(self: Joypad, key: JoypadKey, state: bool) =
   self.state.keys[key] = state
+
+template `[]=`*(self: Joypad, key: JoypadKey, state: bool) =
+  self.setKeyState(key, state)

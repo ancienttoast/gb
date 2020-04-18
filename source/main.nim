@@ -1,6 +1,6 @@
 import
   std/[strformat, times, monotimes],
-  nimgl/[glfw, opengl, imgui], nimgl/imgui/[impl_opengl, impl_glfw],
+  nimgl/[opengl, imgui], sdl2, impl_sdl, nimgl/imgui/[impl_opengl, impl_glfw],
   imageman,
   style, gb, gb/[cpu, timer, ppu, joypad]
 
@@ -37,12 +37,6 @@ proc upload(self: var Texture, image: Image[ColorRGBU]) =
 
 proc destroy(self: Texture) =
   glDeleteTextures(1, unsafeAddr self.texture)
-
-
-proc keyProc(window: GLFWWindow, key: int32, scancode: int32,
-              action: int32, mods: int32): void {.cdecl.} =
-  if key == GLFWKey.ESCAPE and action == GLFWPress:
-    window.setWindowShouldClose(true)
 
 
 template `or`(a, b: ImGuiWindowFlags): ImGuiWindowFlags =
@@ -90,39 +84,26 @@ proc cpuWindow(state: CpuState) =
     igText(&"{state.status}")
   igEnd()
 
-var
-  keys: array[JoypadKey, bool]
-  newRom = ""
-
 proc main() =
-  assert glfwInit()
-
-  glfwWindowHint(GLFWContextVersionMajor, 3)
-  glfwWindowHint(GLFWContextVersionMinor, 3)
-  glfwWindowHint(GLFWOpenglForwardCompat, GLFW_TRUE) # Used for Mac
-  glfwWindowHint(GLFWOpenglProfile, GLFW_OPENGL_CORE_PROFILE)
-  glfwWindowHint(GLFWResizable, GLFW_TRUE)
-
+  sdl2.init(INIT_VIDEO or INIT_AUDIO)
   let
-    window = glfwCreateWindow(1280, 720, "GameBoy")
-  assert window != nil
-
-  discard window.setKeyCallback(keyProc)
-  window.makeContextCurrent()
-  glfwSwapInterval(0)
+    window = sdl2.createWindow("GameBoy", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1280, 720, SDL_WINDOW_RESIZABLE or SDL_WINDOW_OPENGL)
+    glContext = window.glCreateContext()
+  assert glContext != nil
+  discard glSetSwapInterval(0)
 
   assert glInit()
 
   let
     context = igCreateContext()
-
-  assert igGlfwInitForOpenGL(window, true)
+  assert igSdl2InitForOpenGL(window, glContext)
   assert igOpenGL3Init()
 
   styleVGui()
 
   var
     gameboy = newGameboy(BootRom)
+    isOpen = true
     isRunning = true
     showPpu = true
     showControls = true
@@ -139,41 +120,44 @@ proc main() =
 
   gameboy.load(Rom)
 
-  discard window.setKeyCallback(
-    proc(window: GLFWWindow, key: int32, scancode: int32, action: int32, mods: int32) {.cdecl.} =
-      case key
-      of GLFWKey.A: keys[kA] = action != GLFWRelease
-      of GLFWKey.S: keys[kB] = action != GLFWRelease
-      of GLFWKey.Enter: keys[kStart] = action != GLFWRelease
-      of GLFWKey.RightShift: keys[kSelect] = action != GLFWRelease
-      of GLFWKey.Up: keys[kUp] = action != GLFWRelease
-      of GLFWKey.Left: keys[kLeft] = action != GLFWRelease
-      of GLFWKey.Down: keys[kDown] = action != GLFWRelease
-      of GLFWKey.Right: keys[kRight] = action != GLFWRelease
-      else:
-        discard
-  )
-
-  discard window.setDropCallback(
-    proc(window: GLFWWindow, path_count: int32, paths: cstringArray) {.cdecl.} =
-      if path_count > 0:
-        newRom = $paths[0]
-  )
-
   var
     start = getMonoTime()
-  while not window.windowShouldClose:
-    glfwPollEvents()
-
-    if newRom != "":
-      gameboy = newGameboy(BootRom)
-      gameboy.load(newRom)
-      newRom = ""
-      gbRunning = true
-      isRunning = true
-
-    for key, state in keys:
-      gameboy.joypad.setKey(key, state)
+  while isOpen:
+    var
+      event: sdl2.Event
+    while sdl2.pollEvent(event).bool:
+      discard igImplSdl2ProcessEvent(event)
+      case event.kind
+      of QuitEvent:
+        isOpen = false
+      of KeyDown, KeyUp:
+        let
+          m = cast[KeyboardEventPtr](addr event)
+        case m.keysym.scancode
+        of SDL_SCANCODE_A: gameboy.joypad[kA] = m.state == KeyPressed.uint8
+        of SDL_SCANCODE_S: gameboy.joypad[kB] = m.state == KeyPressed.uint8
+        of SDL_SCANCODE_RETURN: gameboy.joypad[kStart] = m.state == KeyPressed.uint8
+        of SDL_SCANCODE_RSHIFT: gameboy.joypad[kSelect] = m.state == KeyPressed.uint8
+        of SDL_SCANCODE_UP: gameboy.joypad[kUp] = m.state == KeyPressed.uint8
+        of SDL_SCANCODE_LEFT: gameboy.joypad[kLeft] = m.state == KeyPressed.uint8
+        of SDL_SCANCODE_DOWN: gameboy.joypad[kDown] = m.state == KeyPressed.uint8
+        of SDL_SCANCODE_RIGHT: gameboy.joypad[kRight] = m.state == KeyPressed.uint8
+        of SDL_SCANCODE_ESCAPE:
+          if m.state == KeyReleased.uint8:
+            isOpen = false
+        else:
+          discard
+      of DropFile:
+        let
+          d = cast[DropEventPtr](addr event)
+        if d.kind == DropFile:
+          gameboy = newGameboy(BootRom)
+          gameboy.load($d.file)
+          gbRunning = true
+          isRunning = true
+          freeClipboardText(d.file)
+      else:
+        discard
 
     let
       dt = (getMonoTime() - start).inNanoseconds.int
@@ -197,7 +181,7 @@ proc main() =
         gbRunning = false
 
     igOpenGL3NewFrame()
-    igGlfwNewFrame()
+    igImplSdl2NewFrame(window)
     igNewFrame()
 
     if igBeginMainMenuBar():
@@ -358,16 +342,16 @@ proc main() =
 
     igOpenGL3RenderDrawData(igGetDrawData())
 
-    window.swapBuffers()
+    window.glSwapWindow()
 
   destroy spriteTexture
   destroy bgTexture
   destroy mainTexture
   igOpenGL3Shutdown()
-  igGlfwShutdown()
-  context.igDestroyContext()
+  igSdl2Shutdown()
+  glDeleteContext(glContext)
 
-  window.destroyWindow()
-  glfwTerminate()
+  destroy window
+  sdl2.quit()
 
 main()

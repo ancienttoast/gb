@@ -9,4 +9,4 @@ bin           = @["gb"]
 
 
 # Dependencies
-requires "nim >= 1.0.4", "nimgl >= 1.1.1", "imageman >= 0.6.5"
+requires "nim >= 1.0.4", "sdl2 >= 2.0", "nimgl >= 1.1.1", "imageman >= 0.6.5"
