@@ -115,6 +115,13 @@ proc load*(self: Gameboy, rom = "") =
   else:
     staticBoot(self.cpu, self.mcu)
 
+proc step*(self: Gameboy): bool =
+  let
+    cycles = self.cpu.step(self.mcu)
+  for i in 0..<cycles:
+    self.timer.step()
+    result = result or self.ppu.step()
+
 proc newGameboy*(bootRom = ""): Gameboy =
   let
     mcu = newMcu()

@@ -20,13 +20,6 @@ const
 type
   Texture = tuple[texture: GLuint, width, height: int]
 
-proc initTexture(): Texture =
-  glGenTextures(1, addr result.texture)
-  glBindTexture(GL_TEXTURE_2D, result.texture)
-
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST.GLint)
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST.GLint)
-
 proc upload(self: var Texture, image: Image[ColorRGBU]) =
   glBindTexture(GL_TEXTURE_2D, self.texture)
   glPixelStorei(GL_UNPACK_ROW_LENGTH, 0)
@@ -35,9 +28,19 @@ proc upload(self: var Texture, image: Image[ColorRGBU]) =
   self.width = image.width
   self.height = image.height
 
+proc initTexture(): Texture =
+  glGenTextures(1, addr result.texture)
+  glBindTexture(GL_TEXTURE_2D, result.texture)
+
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST.GLint)
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST.GLint)
+
 proc destroy(self: Texture) =
   glDeleteTextures(1, unsafeAddr self.texture)
 
+
+proc igTexture(self: Texture, scale: float) =
+  igImage(cast[pointer](self.texture), ImVec2(x: self.width.float32 * scale, y: self.height.float32 * scale))
 
 template `or`(a, b: ImGuiWindowFlags): ImGuiWindowFlags =
   (a.int or b.int).ImGuiWindowFlags
@@ -84,6 +87,124 @@ proc cpuWindow(state: CpuState) =
     igText(&"{state.status}")
   igEnd()
 
+
+type
+  PpuWindow = ref object
+    bgTexture: Texture
+    tileMapTextures: array[3, Texture]
+    spriteTexture: Texture
+    oamTextures: array[40, Texture]
+
+proc draw(self: PpuWindow, ppu: Ppu) =
+  igSetNextWindowPos(ImVec2(x: 745, y: 24), FirstUseEver)
+  igSetNextWindowSize(ImVec2(x: 530, y: 570), FirstUseEver)
+  igBegin("Ppu", flags = ImGuiWindowFlags.NoResize or ImGuiWindowFlags.NoCollapse)
+  if not igIsWindowCollapsed():
+    if igBeginTabBar("display"):
+      if igBeginTabItem("BG map"):
+        let
+          image = ppu.renderBackground(drawGrid = false)
+        self.bgTexture.upload(image)
+        igTexture(self.bgTexture, 2)
+        igEndTabItem()
+      if igBeginTabItem("Sprite map"):
+        let
+          image = ppu.renderSprites()
+        self.spriteTexture.upload(image)
+        igTexture(self.spriteTexture, 2)
+        igEndTabItem()
+      if igBeginTabItem("Tile map"):
+        for i in 0..2:
+          let
+            image = ppu.renderTiles(i)
+          self.tileMapTextures[i].upload(image)
+          igTexture(self.tileMapTextures[i], 2)
+        igEndTabItem()
+      if igBeginTabItem("OAM"):
+        var
+          selected = 0
+        let
+          oams = ppu.state.oam
+        for i, oam in oams:
+          if igBeginChild("oam" & $i, ImVec2(x: igGetWindowContentRegionWidth() / 9, y: 80), true, ImGuiWindowFlags.NoScrollbar):
+            if igIsWindowHovered():
+              selected = i
+            let
+              tile = ppu.bgTile(oam.tile.int)
+            self.oamTextures[i].upload(tile)
+            igTexture(self.oamTextures[i], 2)
+            igSameLine()
+            igBeginGroup()
+            igText(&"{oam.y:#04x}")
+            igText(&"{oam.x:#04x}")
+            igText(&"{oam.tile:#04x}")
+            igText(&"{oam.flags:#04x}")
+            igEndGroup()
+          igEndChild()
+
+          if (i + 1) mod 8 != 0:
+            igSameLine()
+        
+        if igBeginChild("highlight", ImVec2(x: 0, y: 0), true, ImGuiWindowFlags.NoScrollbar):
+          let
+            oam = oams[selected]
+          igTexture(self.oamTextures[selected], 9)
+
+          igSameLine()
+
+          igBeginGroup()
+          block:
+            igTextDisabled("Flags  ")
+            igSameLine()
+            igText(&"{oam.flags:08b}")
+
+            igTextDisabled("   Flip x    ")
+            igSameLine()
+            igText($oam.isXFlipped)
+            igTextDisabled("   Flip y    ")
+            igSameLine()
+            igText($oam.isYFlipped)
+
+            igTextDisabled("   Palette   ")
+            igSameLine()
+            igText($oam.palette)
+          igEndGroup()
+
+          igSameLine()
+
+          igBeginGroup()
+          block:
+            igTextDisabled("Position  ")
+            igSameLine()
+            igText(&"{oam.x - 8:3}x{oam.y - 16:3}")
+            igTextDisabled("Tile      ")
+            igSameLine()
+            igText(&"{oam.tile:3} ({0x8000 + oam.tile*16:#06x})")
+          igEndGroup()
+        igEndChild()
+        
+        igEndTabItem()
+      igEndTabBar()
+  igEnd()
+
+proc initPpuWindow(): PpuWindow =
+  result = PpuWindow()
+  result.bgTexture = initTexture()
+  result.tileMapTextures = [initTexture(), initTexture(), initTexture()]
+  result.spriteTexture = initTexture()
+  for texture in result.oamTextures.mitems:
+    texture = initTexture()
+
+proc destroy(self: PpuWindow) =
+  destroy self.bgTexture
+  for texture in self.tileMapTextures:
+    destroy texture
+  destroy self.spriteTexture
+  for texture in self.oamTextures:
+    destroy texture
+
+
+
 proc main() =
   sdl2.init(INIT_VIDEO or INIT_AUDIO)
   let
@@ -109,14 +230,9 @@ proc main() =
     showControls = true
     showCpu = true
     showDemo = false
-    bgTexture = initTexture()
+    ppuWindow = initPpuWindow()
     mainTexture = initTexture()
-    tileMapTextures = [initTexture(), initTexture(), initTexture()]
-    spriteTexture = initTexture()
-    oamTextures = newSeq[Texture](40)
     gbRunning = true
-  for texture in oamTextures.mitems:
-    texture = initTexture()
 
   gameboy.load(Rom)
 
@@ -168,11 +284,7 @@ proc main() =
         var
           needsRedraw = false
         while not needsRedraw and gbRunning and isRunning:
-          let
-            cycles = gameboy.cpu.step(gameboy.mcu) * 4
-          for i in 0..<cycles:
-            gameboy.timer.step()
-            needsRedraw = needsRedraw or gameboy.ppu.step()
+          needsRedraw = needsRedraw or gameboy.step()
       except:
         echo getCurrentException().msg
         echo getStackTrace(getCurrentException())
@@ -195,97 +307,7 @@ proc main() =
       igEndMainMenuBar()
 
     if showPpu:
-      igSetNextWindowPos(ImVec2(x: 745, y: 24), FirstUseEver)
-      igSetNextWindowSize(ImVec2(x: 530, y: 570), FirstUseEver)
-      igBegin("Ppu", flags = ImGuiWindowFlags.NoResize or ImGuiWindowFlags.NoCollapse)
-      if not igIsWindowCollapsed():
-        if igBeginTabBar("display"):
-          if igBeginTabItem("BG map"):
-            let
-              image = gameboy.ppu.renderBackground(drawGrid = false)
-            bgTexture.upload(image)
-            igImage(cast[pointer](bgTexture.texture), ImVec2(x: bgTexture.width.float32 * 2, y: bgTexture.height.float32 * 2))
-            igEndTabItem()
-          if igBeginTabItem("Sprite map"):
-            let
-              image = gameboy.ppu.renderSprites()
-            spriteTexture.upload(image)
-            igImage(cast[pointer](spriteTexture.texture), ImVec2(x: spriteTexture.width.float32 * 2, y: spriteTexture.height.float32 * 2))
-            igEndTabItem()
-          if igBeginTabItem("Tile map"):
-            for i in 0..2:
-              let
-                image = gameboy.ppu.renderTiles(i)
-              tileMapTextures[i].upload(image)
-              igImage(cast[pointer](tileMapTextures[i].texture), ImVec2(x: tileMapTextures[i].width.float32 * 2, y: tileMapTextures[i].height.float32 * 2))
-            igEndTabItem()
-          if igBeginTabItem("OAM"):
-            var
-              selected = 0
-            let
-              oams = gameboy.ppu.state.oam
-            for i, oam in oams:
-              if igBeginChild("oam" & $i, ImVec2(x: igGetWindowContentRegionWidth() / 9, y: 80), true, ImGuiWindowFlags.NoScrollbar):
-                if igIsWindowHovered():
-                  selected = i
-                let
-                  tile = gameboy.ppu.bgTile(oam.tile.int)
-                oamTextures[i].upload(tile)
-                igImage(cast[pointer](oamTextures[i].texture), ImVec2(x: oamTextures[i].width.float32 * 2, y: oamTextures[i].height.float32 * 2))
-                igSameLine()
-                igBeginGroup()
-                igText(&"{oam.y:#04x}")
-                igText(&"{oam.x:#04x}")
-                igText(&"{oam.tile:#04x}")
-                igText(&"{oam.flags:#04x}")
-                igEndGroup()
-              igEndChild()
-
-              if (i + 1) mod 8 != 0:
-                igSameLine()
-            
-            igBeginGroup()
-            block:
-              let
-                oam = oams[selected]
-              igImage(cast[pointer](oamTextures[selected].texture), ImVec2(x: oamTextures[selected].width.float32 * 11, y: oamTextures[selected].height.float32 * 11))
-
-              igSameLine()
-
-              igBeginGroup()
-              block:
-                igTextDisabled("Flags  ")
-                igSameLine()
-                igText(&"{oam.flags:08b}")
-
-                igTextDisabled("   Flip x    ")
-                igSameLine()
-                igText($oam.isXFlipped)
-                igTextDisabled("   Flip y    ")
-                igSameLine()
-                igText($oam.isYFlipped)
-
-                igTextDisabled("   Palette   ")
-                igSameLine()
-                igText($oam.palette)
-              igEndGroup()
-
-              igSameLine()
-
-              igBeginGroup()
-              block:
-                igTextDisabled("Position  ")
-                igSameLine()
-                igText(&"{oam.x - 8:3}x{oam.y - 16:3}")
-                igTextDisabled("Tile      ")
-                igSameLine()
-                igText(&"{oam.tile:3} ({0x8000 + oam.tile*16:#06x})")
-              igEndGroup()
-            igEndGroup()
-            
-            igEndTabItem()
-          igEndTabBar()
-      igEnd()
+      ppuWindow.draw(gameboy.ppu)
     
     igSetNextWindowPos(ImVec2(x: 402, y: 24), FirstUseEver)
     igSetNextWindowSize(ImVec2(x: 338, y: 326), FirstUseEver)
@@ -344,9 +366,8 @@ proc main() =
 
     window.glSwapWindow()
 
-  destroy spriteTexture
-  destroy bgTexture
   destroy mainTexture
+  destroy ppuWindow
   igOpenGL3Shutdown()
   igSdl2Shutdown()
   glDeleteContext(glContext)

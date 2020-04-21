@@ -1219,4 +1219,4 @@ func step*(self: var Sm83, mem: var Mcu): int {.discardable.} =
   else:
     self.state.status -= { sfInterruptWait }
 
-  cycles
+  cycles * 4
