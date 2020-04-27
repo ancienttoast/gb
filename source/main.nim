@@ -1,6 +1,6 @@
 import
   std/[strformat, times, monotimes],
-  nimgl/[opengl, imgui], sdl2, impl_sdl, nimgl/imgui/[impl_opengl, impl_glfw],
+  nimgl/[opengl, imgui], sdl2, impl_sdl, nimgl/imgui/impl_opengl,
   imageman,
   style, gb, gb/[cpu, timer, ppu, joypad]
 
