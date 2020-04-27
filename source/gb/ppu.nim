@@ -164,6 +164,12 @@ func bgTileAddress(self: PpuIoState): MemAddress =
 func spriteSize(self: PpuIoState): bool =
   self.lcdc.testBit(2)
 
+func isObjEnabled(self: PpuIoState): bool =
+  self.lcdc.testBit(1)
+
+func isBgEnabled(self: PpuIoState): bool =
+  self.lcdc.testBit(0)
+
 func bgColorShade(self: PpuIoState, colorNumber: range[0..3]): PpuGrayShade =
   (self.bgp shl (6 - colorNumber*2) shr 6).PpuGrayShade
 
@@ -281,12 +287,14 @@ proc step*(self: Ppu): bool {.discardable.} =
     of 80:
       # mDataTransfer: start
       self.state.io.mode = mDataTransfer
-      for x, shade in self.state.bgLine(self.state.io.scx.int, self.state.io.scy.int + self.state.io.ly.int, Width):
-        self.buffer[self.state.io.ly.int][x] = shade
-
-      for x, shade in self.state.objLine(0, self.state.io.ly.int, Width):
-        if shade != gsWhite:
+      if self.state.io.isBgEnabled():
+        for x, shade in self.state.bgLine(self.state.io.scx.int, self.state.io.scy.int + self.state.io.ly.int, Width):
           self.buffer[self.state.io.ly.int][x] = shade
+
+      if self.state.io.isObjEnabled():
+        for x, shade in self.state.objLine(0, self.state.io.ly.int, Width):
+          if shade != gsWhite:
+            self.buffer[self.state.io.ly.int][x] = shade
     of 81..247:
       # mDataTransfer
       discard
