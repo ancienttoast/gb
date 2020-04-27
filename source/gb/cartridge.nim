@@ -88,23 +88,23 @@ const
 
 
 type
+  Mbc1State = tuple
+    ram: seq[uint8]
+    ramEnable: bool
+    ramBank: uint8
+    romBank: uint8
+    select: int
+
   MbcState = object
     case kind: CartridgeType
     of ctRom, ctRomRam, ctRomRamBattery:
       discard
     of ctMbc1, ctMbc1Ram, ctMbc1RamBattery:
-      romBank: uint8
-      select: int
+      mbc1: Mbc1State
+    of ctMbc3, ctMbc3Ram, ctMbc3RamBattery:
+      mbc3: Mbc1State
     else:
       discard
-
-    case ramKind: CartridgeRamSize
-    of crsNone:
-      discard
-    else:
-      ramBank: uint8
-      ramEnable: bool
-      ram: seq[uint8]
 
 proc initMbcNone(mcu: Mcu, state: ptr MbcState, data: ptr string) =
   assert data[].len == 32768
@@ -118,10 +118,10 @@ proc initMbcNone(mcu: Mcu, state: ptr MbcState, data: ptr string) =
     )
   mcu.pushHandler(handler)
 
-proc initMbc1(mcu: Mcu, state: ptr MbcState, data: ptr string, ramSize: CartridgeRamSize) =
+proc initMbc1(mcu: Mcu, state: ptr Mbc1State, data: ptr string, ramSize: CartridgeRamSize) =
   state.romBank = 1
   state.select = 0
-  if state.ramKind != crsNone:
+  if ramSize != crsNone:
     state.ramBank = 0
     state.ramEnable = false
     state.ram = newSeq[uint8](RamSize[ramSize])
@@ -189,31 +189,41 @@ proc initMbc1(mcu: Mcu, state: ptr MbcState, data: ptr string, ramSize: Cartridg
 
 
 type
-  Cartridge* = ref object
+  CartridgeInfo = tuple
     kind: CartridgeType
     romSize: CartridgeRomSize
     ramSize: CartridgeRamSize
+    title: string
+    version: uint8
+
+  Cartridge* = ref object
+    info: CartridgeInfo
     data*: string
     state: MbcState
 
 proc initCartridge*(file: string): Cartridge =
   let
     data = readFile(file)
-    kind = data[0x0147].CartridgeType
-    ramKind = data[0x0149].CartridgeRamSize
+    info = (
+      kind: data[0x0147].CartridgeType,
+      romSize: data[0x0148].CartridgeRomSize,
+      ramSize: data[0x0149].CartridgeRamSize,
+      title: $data[0x0134..0x0143],
+      version: data[0x014c].uint8,
+    )
   result = Cartridge(
+    info: info,
     data: data,
-    kind: kind,
-    romSize: data[0x0148].CartridgeRomSize,
-    ramSize: ramKind,
-    state: MbcState(kind: kind, ramKind: ramKind)
+    state: MbcState(kind: info.kind)
   )
 
 proc pushHandlers*(mcu: Mcu, cart: Cartridge) =
-  case cart.kind:
+  case cart.info.kind:
   of ctRom:
     mcu.initMbcNone(addr cart.state, addr cart.data)
   of ctMbc1, ctMbc1Ram, ctMbc1RamBattery:
-    mcu.initMbc1(addr cart.state, addr cart.data, cart.ramSize)
+    mcu.initMbc1(addr cart.state.mbc1, addr cart.data, cart.info.ramSize)
+  of ctMbc3, ctMbc3Ram, ctMbc3RamBattery:
+    mcu.initMbc1(addr cart.state.mbc3, addr cart.data, cart.info.ramSize)
   else:
-    assert false, "Unsupported cartridge type " & $cart.kind
+    assert false, "Unsupported cartridge type " & $cart.info.kind
