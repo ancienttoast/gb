@@ -9,6 +9,7 @@
 
 ]##
 import
+  std/times,
   gb/[mem, cpu, timer, ppu, cartridge, joypad]
 
 
@@ -85,15 +86,25 @@ proc staticBoot(cpu: Cpu, mcu: Mcu) =
 
 
 type
+  DmgState* = tuple
+    time: DateTime
+    testMemory: seq[uint8]
+    cpu: CpuState
+    timer: TimerState
+    ppu: PpuState
+    joypad: JoypadState
+    cart: MbcState
+
+
   Gameboy* = ref object
     mcu*: Mcu
     cpu*: Cpu
     timer*: Timer
     ppu*: Ppu
     joypad*: Joypad
+    cart*: Cartridge
 
     boot: BootRom
-    cart*: Cartridge
     bootRom*: string
     testMemory*: seq[uint8]
 
@@ -121,6 +132,25 @@ proc step*(self: Gameboy): bool =
   for i in 0..<cycles:
     self.timer.step()
     result = result or self.ppu.step()
+
+
+proc save*(self: Gameboy): DmgState =
+  result.time = now()
+  result.testMemory = self.testMemory
+  result.cpu = self.cpu.state
+  result.timer = self.timer.state
+  result.ppu = self.ppu.state
+  result.joypad = self.joypad.state
+  result.cart = self.cart.state
+
+proc load*(self: Gameboy, state: DmgState) =
+  self.testMemory = state.testMemory
+  self.cpu.state = state.cpu
+  self.timer.state = state.timer
+  self.ppu.state = state.ppu
+  self.joypad.state = state.joypad
+  self.cart.state = state.cart
+
 
 proc newGameboy*(bootRom = ""): Gameboy =
   let

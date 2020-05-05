@@ -1,5 +1,5 @@
 import
-  std/[strformat, times, monotimes],
+  std/[strformat, times, monotimes, options],
   nimgl/[opengl, imgui], sdl2, impl_sdl, nimgl/imgui/impl_opengl,
   imageman,
   style, gb/[dmg, cpu, timer, ppu, joypad]
@@ -233,6 +233,7 @@ proc main*() =
     ppuWindow = initPpuWindow()
     mainTexture = initTexture()
     gbRunning = true
+    states: array[10, Option[DmgState]]
 
   gameboy.load(Rom)
 
@@ -303,6 +304,22 @@ proc main*() =
         igCheckbox("Cpu window", addr showCpu)
         igSeparator()
         igCheckbox("Demo", addr showDemo)
+        igEndMenu()
+      if igBeginMenu("Savestate"):
+        if igBeginMenu("Save"):
+          for i, state in states.mpairs:
+            let
+              label = $i & (if state.isSome: " - " & $state.get.time else: " -")
+            if igMenuItem(label):
+              state = some(gameboy.save())
+          igEndMenu()
+        if igBeginMenu("Load"):
+          for i, state in states.mpairs:
+            let
+              label = $i & (if state.isSome: " - " & $state.get.time else: " -")
+            if igMenuItem(label):
+              gameboy.load(state.get)
+          igEndMenu()
         igEndMenu()
       igEndMainMenuBar()
 

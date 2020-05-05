@@ -1,6 +1,6 @@
 ##[
 
-  * `https://gbdev.gg8.se/wiki/articles/Joypad_Input`_
+  * `https://gbdev.io/pandocs/#joypad-input`_
 
 ]##
 import

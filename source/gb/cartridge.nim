@@ -95,7 +95,7 @@ type
     romBank: uint8
     select: int
 
-  MbcState = object
+  MbcState* = object
     case kind: CartridgeType
     of ctRom, ctRomRam, ctRomRamBattery:
       discard
@@ -199,7 +199,7 @@ type
   Cartridge* = ref object
     info: CartridgeInfo
     data*: string
-    state: MbcState
+    state*: MbcState
 
 proc initCartridge*(file: string): Cartridge =
   let
