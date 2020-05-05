@@ -11,7 +11,7 @@
 ]##
 import
   std/[bitops, strutils, strformat],
-  mem, util
+  mem, interrupt, util
 
 
 
@@ -27,13 +27,6 @@ type
     f: proc(opcode: uint8, cpu: var Sm83State, mem: var Mcu): InstructionInfo {.noSideEffect.}
     p: proc(opcode: uint8, cpu: var Sm83State, mem: var Mcu): string {.noSideEffect.}
 
-
-  Interrupt* {.size: sizeof(uint8).} = enum
-    iVBlank   ## [INT 0x40]
-    iLcdStat  ## [INT 0x48]
-    iTimer    ## [INT 0x50]
-    iSerial   ## [INT 0x58]
-    iJoypad   ## [INT 0x60]
 
   Flag* {.size: sizeof(uint8).} = enum
     fUnused0
@@ -67,8 +60,6 @@ type
     rDE = (2, "DE")
     rHL = (3, "HL")
 
-  Register = Register8 | Register16
-
   Sm83StatusFlag* = enum
     sfHalted
     sfInterruptWait
@@ -92,8 +83,6 @@ type
 
 const
   Registers*: array[Register16, array[2, Register8]] = [ [rA, rF], [rB, rC], [rD, rE], [rH, rL] ]
-  InterruptHandler: array[Interrupt, MemAddress] = [ 0x40.MemAddress, 0x48, 0x50, 0x58, 0x60 ]
-  IfAddress = 0xff0f.MemAddress
 
 proc pushHandler*(mcu: Mcu, self: Sm83) =
   mcu.pushHandler(0xffff, cast[ptr uint8](addr self.state.ie))
@@ -104,13 +93,6 @@ proc newCpu*(mcu: Mcu): Sm83 =
     # TODO: default values
   )
   mcu.pushHandler(result)
-
-
-proc raiseInterrupt*(mcu: Mcu, interrupt: Interrupt) =
-  var
-    table = mcu[IfAddress]
-  setBit(table, interrupt.ord)
-  mcu[IfAddress] = table
 
 
 template `[]`*(self: Sm83State, register: Register8): uint8 =
@@ -188,16 +170,13 @@ template bit(opcode: uint8): range[0..7] =
 template hasHalfCarrySub(a, b: uint8): bool =
   (a and 0x0f) < (b and 0x0f)
 
-func setBits[T: uint8 | uint16](bits: Slice[int]): T =
-  for b in bits:
-    result = result or (1.T shl b.T)
-
 func hasHalfCarryAdd[T: uint8 | uint16](bits: static[int], a, b: T): bool =
   const
     mask = setBits[T](0..bits)
   (a and mask) + (b and mask) > mask
 
-template hasHalfCarryAdd(a, b: uint8): bool = hasHalfCarryAdd(3, a, b)
+template hasHalfCarryAdd(a, b: uint8): bool =
+  hasHalfCarryAdd(3, a, b)
 
 
 #[ Misc ]#

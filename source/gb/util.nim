@@ -50,6 +50,9 @@ func testBit*[T: uint8 | uint16 | int](value: T, bit: static[int]): bool =
     Mask = 1.T shl bit
   (value and Mask) == Mask
 
+func setBits*[T: uint8 | uint16](bits: Slice[int]): T =
+  for b in bits:
+    result = result or (1.T shl b.T)
 
 
 iterator count*(a, b: int): int =

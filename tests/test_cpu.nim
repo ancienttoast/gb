@@ -1,6 +1,6 @@
 import
   std/[unittest, strformat],
-  gb/[mem, cpu]
+  gb/[mem, interrupt, cpu]
 
 
 

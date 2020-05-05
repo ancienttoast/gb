@@ -46,7 +46,7 @@
 ]##
 import
   imageman,
-  mem, cpu, util
+  mem, interrupt, util
 
 
 

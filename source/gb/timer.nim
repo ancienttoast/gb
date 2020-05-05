@@ -16,7 +16,7 @@
 
 ]##
 import
-  mem, cpu
+  mem, interrupt
 
 
 
