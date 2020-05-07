@@ -197,15 +197,19 @@ func isYFlipped*(sprite: PpuSpriteAttribute): bool =
 func isVisible(sprite: PpuSpriteAttribute): bool =
   not (sprite.x == 0 or sprite.x >= 168'u8 or sprite.y == 0 or sprite.y >= 168'u8)
 
+func tileAddress(sprite: PpuSpriteAttribute, isBig: bool): int =
+  var
+    tile = sprite.tile.int
+  if isBig:
+    tile = tile and 0b11111110
+  0x8000 + tile*16
+
 
 func bgTileAddress(state: PpuState, tileNum: uint8): int =
   if state.io.bgTileAddress().int == 0x8000:
     state.io.bgTileAddress().int + tileNum.int*16
   else:
     0x9000 + (cast[int8](tileNum)).int*16
-
-func objTileAddress(state: PpuState, tileNum: uint8): int =
-  0x8000 + tileNum.int*16
 
 iterator tileLine(state: PpuState, tileAddress: int, line: int, palette: uint8, start = 0, flipX = false): PpuGrayShade =
   let
@@ -250,18 +254,19 @@ iterator objLine*(state: PpuState, x, y: int, width: int): tuple[x: int, shade: 
     let
       sx = sprite.x.int - 8
       sy = sprite.y.int - 16
-    if not(y in sy ..< sy+(if state.io.spriteSize: 16 else: 8))or sx+8 < x or sx >= x+width:
+      height = if state.io.spriteSize: 16 else: 8
+    if not(y in sy ..< sy+height)or sx+8 < x or sx >= x+width:
       continue
 
-    # TODO: handle sprite OBJ-to-BG Priority
     let
       f = max(x, sx)
       t = min(x+width, sx+8)
+      tileAddress = sprite.tileAddress(state.io.spriteSize)
     var
-      line = 7 - (sy - y + 7)
-    if sprite.isYFlipped: line = 7 - line
+      line = height - 1 - (sy - y + (height - 1))
+    if sprite.isYFlipped: line = height - 1 - line
     var i = f
-    for shade in state.tileLine(state.objTileAddress(sprite.tile), line, state.io.obp[sprite.palette], f - sx, sprite.isXFlipped):
+    for shade in state.tileLine(tileAddress, line, state.io.obp[sprite.palette], f - sx, sprite.isXFlipped):
       yield (x: i, shade: shade)
       i += 1
       if i == t:
@@ -391,23 +396,20 @@ proc renderTiles*(self: Ppu, b: range[0..2]): Image[ColorRGBU] =
         tileImage = self.bgTile(b*128 + (x + y*16))
       result.blit(tileImage, x*8, y*8)
 
-proc renderSprites*(self: Ppu): Image[ColorRGBU] =
-  result = initImage[ColorRGBU](Width, Height)
-  for sprite in self.state.oam:
-    if sprite.x == 0 or sprite.x >= 160'u8 or sprite.y == 0 or sprite.y >= 168'u8:
-      continue
-    let
-      x = sprite.x.int - 8
-      y = sprite.y.int - 16
-    var
-      tileImage = self.bgTile(sprite.tile.int)
-    if x < 0 or y < 0 or x + tileImage.width >= result.width or y + tileImage.height >= result.height:
-      # TODO: handle this case
-      continue
-    if sprite.isXFlipped: tileImage = tileImage.flippedHoriz()
-    if sprite.isYFlipped: tileImage = tileImage.flippedVert()
-    result.blit(tileImage, x, y)
 
+
+proc renderObj*(self: Ppu, tileNum: uint8): Image[ColorRGBU] =
+  result = initImage[ColorRGBU](8, 8)
+  let
+    obj = self.state.oam[tileNum]
+  for y in 0..result.height:
+    var
+      x = 0
+    let
+      address = obj.tileAddress(self.state.io.spriteSize)
+    for shade in self.state.tileLine(address, y, self.state.io.obp[obj.palette]):
+      result[x, y] = Colors[shade]
+      x += 1
 
 
 proc renderBackground*(self: Ppu, drawGrid = true): Image[ColorRGBU] =
@@ -430,13 +432,11 @@ proc renderBackground*(self: Ppu, drawGrid = true): Image[ColorRGBU] =
     for y in 1..<MapSize:
       result.drawLine(0, y*8, result.width - 1, y*8, [0'u8, 255, 0].ColorRGBU)
 
-#[
 proc renderSprites*(self: Ppu): Image[ColorRGBU] =
   result = initImage[ColorRGBU](Width, Height)
   for y in 0..<Height:
     for x, shade in self.state.objLine(0, y, Width):
       result[x, y] = Colors[shade]
-]#
 
 proc renderLcd*(self: Ppu): Image[ColorRGBU] =
   result = initImage[ColorRGBU](Width, Height)
