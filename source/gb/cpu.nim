@@ -89,9 +89,7 @@ proc pushHandler*(mcu: Mcu, self: Sm83) =
   mcu.pushHandler(0xff0f, cast[ptr uint8](addr self.state.`if`))
 
 proc newCpu*(mcu: Mcu): Sm83 =
-  result = Sm83(
-    # TODO: default values
-  )
+  result = Sm83()
   mcu.pushHandler(result)
 
 
@@ -153,6 +151,14 @@ template op(name, dur, body: untyped): untyped {.dirty.} =
     )
 
 
+func test(cond: JumpCondition, cpu: var Sm83State): bool =
+  case cond
+  of jcNZ: fZero notin cpu.flags
+  of jcZ:  fZero in cpu.flags
+  of jcNC: fCarry notin cpu.flags
+  of jcC:  fCarry in cpu.flags
+
+
 template nn(cpu: var Sm83State, mem: var Mcu): uint16 =
   ## Order: LSB, MSB
   let
@@ -198,13 +204,7 @@ op opJPccu16, 3:
   # TODO: variable length  cc == false: 3, cc == true: 4
   let
     nn = cpu.nn(mem)
-    cc = ((opcode and 0b00011000) shr 3).JumpCondition
-    cond = case cc
-      of jcNZ: fZero notin cpu.flags
-      of jcZ:  fZero in cpu.flags
-      of jcNC: fCarry notin cpu.flags
-      of jcC:  fCarry in cpu.flags
-  if cond:
+  if opcode.cc.test(cpu):
     cpu.pc = nn
   #result.dissasm = &"JP {cc},{nn:#x}"
 
@@ -218,13 +218,7 @@ op opJRccs8, 2:
   # TODO: variable length  cc == false: 2, cc == true: 3
   let
     e = cast[int8](cpu.readNext(mem))
-    cc = ((opcode and 0b00011000) shr 3).JumpCondition
-    cond = case cc
-      of jcNZ: fZero notin cpu.flags
-      of jcZ:  fZero in cpu.flags
-      of jcNC: fCarry notin cpu.flags
-      of jcC:  fCarry in cpu.flags
-  if cond:
+  if opcode.cc.test(cpu):
     cpu.pc = (cpu.pc.int + e.int).uint16
   #result.dissasm = &"JR {cc},{e:#x}"
 
@@ -242,13 +236,7 @@ op opCALLccu16, 3:
   # TODO: variable length  cc == false: 3, cc == true: 6
   let
     nn = cpu.nn(mem)
-    cc = ((opcode and 0b00011000) shr 3).JumpCondition
-    cond = case cc
-      of jcNZ: fZero notin cpu.flags
-      of jcZ:  fZero in cpu.flags
-      of jcNC: fCarry notin cpu.flags
-      of jcC:  fCarry in cpu.flags
-  if cond:
+  if opcode.cc.test(cpu):
     opCall(cpu, mem, nn)
   #result.dissasm = &"CALL {cc},{nn:#x}"
 
@@ -257,14 +245,7 @@ op opRET, 4:
   #result.dissasm = &"RET"
 
 op opRETcc, 2: # 5
-  let
-    cc = opcode.cc
-    cond = case cc
-      of jcNZ: fZero notin cpu.flags
-      of jcZ:  fZero in cpu.flags
-      of jcNC: fCarry notin cpu.flags
-      of jcC:  fCarry in cpu.flags
-  if cond:
+  if opcode.cc.test(cpu):
     cpu.pc = cpu.pop[:uint16](mem)
   #result.dissasm = &"RET {cc}"
 
@@ -469,7 +450,7 @@ op opPUSHr16, 4:
   assert xx in {0, 1, 2, 3}
   if xx == 3:
     cpu.push(mem, cpu[rAF])
-    #result.dissasm = "PUSH A"
+    #result.dissasm = "PUSH AF"
   else:
     let
       r16 = (xx + 1).Register16
