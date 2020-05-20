@@ -194,6 +194,9 @@ func isXFlipped*(sprite: PpuSpriteAttribute): bool =
 func isYFlipped*(sprite: PpuSpriteAttribute): bool =
   testBit(sprite.flags, 6)
 
+func priority*(sprite: PpuSpriteAttribute): bool =
+  getBit(sprite.flags, 7) == 1
+
 func isVisible(sprite: PpuSpriteAttribute): bool =
   not (sprite.x == 0 or sprite.x >= 168'u8 or sprite.y == 0 or sprite.y >= 168'u8)
 
@@ -246,7 +249,7 @@ iterator bgLine*(state: PpuState, x, y: int, width: int): tuple[x: int, shade: P
       tileX = (tileX + 1).wrap32
       startX = 0
 
-iterator objLine*(state: PpuState, x, y: int, width: int): tuple[x: int, shade: PpuGrayShade] =
+iterator objLine*(state: PpuState, x, y: int, width: int): tuple[x: int, shade: PpuGrayShade, priority: bool] =
   for sprite in state.oam:
     if not sprite.isVisible:
       continue
@@ -267,7 +270,7 @@ iterator objLine*(state: PpuState, x, y: int, width: int): tuple[x: int, shade: 
     if sprite.isYFlipped: line = height - 1 - line
     var i = f
     for shade in state.tileLine(tileAddress, line, state.io.obp[sprite.palette], f - sx, sprite.isXFlipped):
-      yield (x: i, shade: shade)
+      yield (x: i, shade: shade, priority: sprite.priority)
       i += 1
       if i == t:
         break
@@ -297,8 +300,8 @@ proc step*(self: Ppu): bool {.discardable.} =
           self.buffer[self.state.io.ly.int][x] = shade
 
       if self.state.io.isObjEnabled():
-        for x, shade in self.state.objLine(0, self.state.io.ly.int, Width):
-          if shade != gsWhite:
+        for x, shade, priority in self.state.objLine(0, self.state.io.ly.int, Width):
+          if (not priority or self.buffer[self.state.io.ly.int][x] == gsWhite) and shade != gsWhite:
             self.buffer[self.state.io.ly.int][x] = shade
     of 81..247:
       # mDataTransfer
@@ -435,7 +438,7 @@ proc renderBackground*(self: Ppu, drawGrid = true): Image[ColorRGBU] =
 proc renderSprites*(self: Ppu): Image[ColorRGBU] =
   result = initImage[ColorRGBU](Width, Height)
   for y in 0..<Height:
-    for x, shade in self.state.objLine(0, y, Width):
+    for x, shade, priority in self.state.objLine(0, y, Width):
       result[x, y] = Colors[shade]
 
 proc renderLcd*(self: Ppu): Image[ColorRGBU] =
