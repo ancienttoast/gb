@@ -87,26 +87,15 @@ const
 
 
 
-type
-  Mbc1State = tuple
-    ram: seq[uint8]
-    ramEnable: bool
-    ramBank: uint8
-    romBank: uint8
-    select: int
 
-  MbcState* = object
-    case kind: CartridgeType
-    of ctRom, ctRomRam, ctRomRamBattery:
-      discard
-    of ctMbc1, ctMbc1Ram, ctMbc1RamBattery:
-      mbc1: Mbc1State
-    of ctMbc3, ctMbc3Ram, ctMbc3RamBattery:
-      mbc3: Mbc1State
-    else:
-      discard
 
-proc initMbcNone(mcu: Mcu, state: ptr MbcState, data: ptr string) =
+#[########################################################################################
+
+    None
+
+########################################################################################]#
+
+proc initMbcNone(mcu: Mcu, data: ptr string) =
   assert data[].len == 32768
   let
     handler = MemHandler(
@@ -118,7 +107,58 @@ proc initMbcNone(mcu: Mcu, state: ptr MbcState, data: ptr string) =
     )
   mcu.pushHandler(handler)
 
-proc initMbc1(mcu: Mcu, state: ptr Mbc1State, data: ptr string, ramSize: CartridgeRamSize) =
+
+
+#[########################################################################################
+
+    MBC1
+
+########################################################################################]#
+
+type
+  Mbc1State = tuple
+    ram: seq[uint8]
+    ramEnable: bool
+    ramBank: uint8
+    romBank: uint8
+    select: int
+
+proc initMbc1(mcu: Mcu, state: ptr Mbc1State, rom: ptr string, ramSize: CartridgeRamSize) =
+  proc romReadHandler(address: MemAddress): uint8 =
+    case address
+    of 0x0000'u16..0x3fff'u16:
+      cast[uint8](rom[address.int])
+    of 0x4000'u16..0x7fff'u16:
+      let
+        p = address - 0x4000
+      cast[uint8](rom[(state.romBank.int * RomBankSize) + p.int])
+    else:
+      0'u8
+  
+  proc romWriteHandler(address: MemAddress, value: uint8) =
+    case address
+    of 0x0000'u16..0x1fff'u16:
+      if ramSize != crsNone:
+        state.ramEnable = (value and 0x0f) == 0x0a
+    of 0x2000'u16..0x3fff'u16:
+      state.romBank = state.romBank and 0b11100000
+      state.romBank = state.romBank or (value and 0b00011111)
+      if state.romBank in { 0x00, 0x20, 0x40, 0x60 }:
+        # handle MBC1 rom select bug where any attempt to address banks
+        # 0x00, 0x20, 0x40 or 0x60 will address 0x01, 0x21, 0x41, 0x61 instead
+        state.romBank += 1
+    of 0x4000'u16..0x5fff'u16:
+      if state.select == 0:
+        state.romBank = state.romBank and 0b00011111
+        state.romBank = state.romBank or (value and 0b00000011 shl 5)
+      elif ramSize != crsNone:
+        state.ramBank = (value and 0b00000011) shl 5
+    of 0x6000'u16..0x7fff'u16:
+      assert value in {0, 1}
+      state.select = value.int
+    else:
+      discard
+
   state.romBank = 1
   state.select = 0
   if ramSize != crsNone:
@@ -127,37 +167,8 @@ proc initMbc1(mcu: Mcu, state: ptr Mbc1State, data: ptr string, ramSize: Cartrid
     state.ram = newSeq[uint8](RamSize[ramSize])
   let
     romHandler = MemHandler(
-      read: proc(address: MemAddress): uint8 =
-        if address in 0x0000'u16..0x3fff'u16:
-          cast[uint8](data[address.int])
-        else:
-          let
-            p = address - 0x4000
-          cast[uint8](data[(state.romBank.int * RomBankSize) + p.int])
-      ,
-      write: proc(address: MemAddress, value: uint8) =
-        case address
-        of 0x0000'u16-0x1fff'u16:
-          if ramSize != crsNone:
-            state.ramEnable = (value and 0x0f) == 0x0a
-        of 0x2000'u16..0x3fff'u16:
-          state.romBank = state.romBank and 0b11100000
-          state.romBank = state.romBank or (value and 0b00011111)
-          # TODO
-          if state.romBank == 0:
-            state.romBank = 1
-        of 0x4000'u16..0x5fff'u16:
-          if state.select == 0:
-            state.romBank = state.romBank and 0b00011111
-            state.romBank = state.romBank or (value and 0b00000011 shl 5)
-          elif ramSize != crsNone:
-            state.ramBank = (value and 0b00000011) shl 5
-        of 0x6000'u16..0x7fff'u16:
-          assert value in {0, 1}
-          state.select = value.int
-        else:
-          discard
-      ,
+      read: romReadHandler,
+      write: romWriteHandler,
       area: MbcRom
     )
   mcu.pushHandler(romHandler)
@@ -188,7 +199,20 @@ proc initMbc1(mcu: Mcu, state: ptr Mbc1State, data: ptr string, ramSize: Cartrid
 
 
 
+
+
 type
+  MbcState* = object
+    case kind: CartridgeType
+    of ctRom, ctRomRam, ctRomRamBattery:
+      discard
+    of ctMbc1, ctMbc1Ram, ctMbc1RamBattery:
+      mbc1: Mbc1State
+    of ctMbc3, ctMbc3Ram, ctMbc3RamBattery:
+      mbc3: Mbc1State
+    else:
+      discard
+
   CartridgeInfo = tuple
     kind: CartridgeType
     romSize: CartridgeRomSize
@@ -220,7 +244,7 @@ proc initCartridge*(file: string): Cartridge =
 proc pushHandlers*(mcu: Mcu, cart: Cartridge) =
   case cart.info.kind:
   of ctRom:
-    mcu.initMbcNone(addr cart.state, addr cart.data)
+    mcu.initMbcNone(addr cart.data)
   of ctMbc1, ctMbc1Ram, ctMbc1RamBattery:
     mcu.initMbc1(addr cart.state.mbc1, addr cart.data, cart.info.ramSize)
   of ctMbc3, ctMbc3Ram, ctMbc3RamBattery:
