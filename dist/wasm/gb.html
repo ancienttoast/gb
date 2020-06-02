@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>GB</title>
+    <style>
+      body {
+        margin: 0;
+        background-color: #000
+      }
+
+      #canvas {
+        padding: 0;
+        margin: auto;
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="canvas"></canvas>
+    <script type="text/javascript">
+      var Module = {
+        preRun: [],
+        postRun: [],
+        print: (function() {
+            return function(text) {
+                text = Array.prototype.slice.call(arguments).join(' ');
+                console.log(text);
+            };
+        })(),
+        printErr: function(text) {
+            text = Array.prototype.slice.call(arguments).join(' ');
+            console.error(text);
+        },
+        canvas: (function() {
+            return document.getElementById('canvas');
+        })(),
+        setStatus: function(text) {
+            console.log("status: " + text);
+        },
+        monitorRunDependencies: function(left) {
+            console.log("monitor run deps: " + left);
+        }
+      };
+      window.onerror = function() {
+        console.log("onerror: " + event.message);
+      };
+    </script>
+    {{{ SCRIPT }}}
+    <script type="text/javascript">
+      function onResize() {
+        var canvas = document.getElementById("canvas");
+        canvas.style.height = window.innerHeight + "px";
+      }
+
+      window.onresize = onResize;
+      onResize();
+    </script>
+  </body>
+</html>
