@@ -13,7 +13,8 @@ const
   #BootRom = "123/[BIOS] Nintendo Game Boy Boot ROM (World).gb"
   BootRom = ""
   #Rom = "123/gb-test-roms-master/cpu_instrs/individual/02-interrupts.gb"
-  Rom = "123/Zelda no Densetsu - Yume o Miru Shima (Japan) (Rev A).gb"
+  #Rom = "123/Zelda no Densetsu - Yume o Miru Shima (Japan) (Rev A).gb"
+  Rom = "123/dmg-acid2.gb"
 
 
 
@@ -180,6 +181,9 @@ proc draw(self: PpuWindow, ppu: Ppu) =
             igTextDisabled("Tile      ")
             igSameLine()
             igText(&"{oam.tile:3} ({0x8000 + oam.tile*16:#06x})")
+            igTextDisabled("Priority  ")
+            igSameLine()
+            igText(&"{oam.priority}")
           igEndGroup()
         igEndChild()
         
@@ -215,15 +219,14 @@ proc main*() =
 
   assert glInit()
 
-  let
-    context = igCreateContext()
+  discard igCreateContext()
   assert igSdl2InitForOpenGL(window, glContext)
   assert igOpenGL3Init()
 
   styleVGui()
 
   var
-    gameboy = newGameboy(BootRom)
+    gameboy = newGameboy(if BootRom == "": "" else: readFile(BootRom))
     isOpen = true
     isRunning = true
     showPpu = true
@@ -235,7 +238,7 @@ proc main*() =
     gbRunning = true
     states: array[10, Option[DmgState]]
 
-  gameboy.load(Rom)
+  gameboy.load(readFile(Rom))
 
   var
     start = getMonoTime()
@@ -268,8 +271,8 @@ proc main*() =
         let
           d = cast[DropEventPtr](addr event)
         if d.kind == DropFile:
-          gameboy = newGameboy(BootRom)
-          gameboy.load($d.file)
+          gameboy = newGameboy(if BootRom == "": "" else: readFile(BootRom))
+          gameboy.load(readFile($d.file))
           gbRunning = true
           isRunning = true
           freeClipboardText(d.file)
@@ -345,8 +348,8 @@ proc main*() =
       igBegin("Controls")
 
       if igButton("Reset"):
-        gameboy = newGameboy(BootRom)
-        gameboy.load(Rom)
+        gameboy = newGameboy(if BootRom == "": "" else: readFile(BootRom))
+        gameboy.load(readFile(Rom))
         gbRunning = true
       
       igSeparator()

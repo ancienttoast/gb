@@ -225,9 +225,9 @@ type
     data*: string
     state*: MbcState
 
-proc initCartridge*(file: string): Cartridge =
+proc initCartridge*(rom: string): Cartridge =
   let
-    data = readFile(file)
+    data = rom
     info = (
       kind: data[0x0147].CartridgeType,
       romSize: data[0x0148].CartridgeRomSize,

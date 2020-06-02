@@ -36,9 +36,9 @@ proc pushHandler(mcu: Mcu, self: BootRom) =
   mcu.pushHandler(bootRomHandler)
   mcu.pushHandler(bootRomDisableHandler)
 
-proc newBootRom(file: string): BootRom =
+proc newBootRom(bootRom: string): BootRom =
   result = BootRom(
-    data: readFile(file)
+    data: bootRom
   )
   assert result.data.len == 256
 
