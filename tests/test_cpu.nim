@@ -24,12 +24,12 @@ template modState(cpu: SM83, body: untyped): CpuState =
 
 template modMem(mem: seq[uint8], body: untyped): seq[uint8] =
   var
-    m {.inject.} = mem.deepCopy
+    m {.inject.} = mem
   body
   m
 
 template modMem(mem: seq[uint8]): seq[uint8] =
-  mem.deepCopy
+  mem
 
 
 
