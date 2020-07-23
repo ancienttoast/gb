@@ -275,16 +275,46 @@ iterator objLine*(state: PpuState, x, y: int, width: int): tuple[x: int, shade: 
       if i == t:
         break
 
+proc transferStart(self: Ppu) =
+  self.state.io.mode = mDataTransfer
+  if self.state.io.isBgEnabled():
+    for x, shade in self.state.bgLine(self.state.io.scx.int, self.state.io.scy.int + self.state.io.ly.int, Width):
+      self.buffer[self.state.io.ly.int][x] = shade
+
+  if self.state.io.isObjEnabled():
+    for x, shade, priority in self.state.objLine(0, self.state.io.ly.int, Width):
+      if (not priority or self.buffer[self.state.io.ly.int][x] == gsWhite) and shade != gsWhite:
+        self.buffer[self.state.io.ly.int][x] = shade
+
+proc nextLine(self: Ppu) =
+  self.state.io.ly += 1
+  self.state.timer = 0
+
+  if self.state.io.ly == self.state.io.lyc:
+    setBit(self.state.io.stat, 2)
+  else:
+    clearBit(self.state.io.stat, 2)
+
+proc handleInterrupt(self: Ppu) =
+  let
+    mode = self.state.io.mode
+    stat = ((self.state.io.ly == self.state.io.lyc) and testBit(self.state.io.stat, 6)) or
+      (mode == mHBlank and testBit(self.state.io.stat, 3)) or
+      (mode == mSearchingOam and testBit(self.state.io.stat, 5)) or
+      (mode == mVBlank and (testBit(self.state.io.stat, 4) or testBit(self.state.io.stat, 5)))
+  if not self.state.stateIR and stat:
+    self.mcu.raiseInterrupt(iLcdStat)
+  self.state.stateIR = stat
+
+proc dmaTransfer(self: Ppu) =
+  if (self.state.dma and 0x00ff) <= 0x009f:
+    self.mcu[(OamStartAddress.uint16 + (self.state.dma and 0x00ff)).MemAddress] = self.mcu[self.state.dma]
+    self.state.dma += 1
+
 proc step*(self: Ppu): bool {.discardable.} =
   self.state.timer += 1
   if self.state.timer > 456:
-    self.state.io.ly += 1
-    self.state.timer = 0
-
-    if self.state.io.ly == self.state.io.lyc:
-      setBit(self.state.io.stat, 2)
-    else:
-      clearBit(self.state.io.stat, 2)
+    self.nextLine()
 
   case self.state.io.ly
   of 0..(Height-1):
@@ -294,15 +324,7 @@ proc step*(self: Ppu): bool {.discardable.} =
       self.state.io.mode = mSearchingOam
     of 80:
       # mDataTransfer: start
-      self.state.io.mode = mDataTransfer
-      if self.state.io.isBgEnabled():
-        for x, shade in self.state.bgLine(self.state.io.scx.int, self.state.io.scy.int + self.state.io.ly.int, Width):
-          self.buffer[self.state.io.ly.int][x] = shade
-
-      if self.state.io.isObjEnabled():
-        for x, shade, priority in self.state.objLine(0, self.state.io.ly.int, Width):
-          if (not priority or self.buffer[self.state.io.ly.int][x] == gsWhite) and shade != gsWhite:
-            self.buffer[self.state.io.ly.int][x] = shade
+      self.transferStart()
     of 81..247:
       # mDataTransfer
       discard
@@ -322,19 +344,8 @@ proc step*(self: Ppu): bool {.discardable.} =
   else:
     discard
 
-  let
-    mode = self.state.io.mode
-    stat = ((self.state.io.ly == self.state.io.lyc) and testBit(self.state.io.stat, 6)) or
-      (mode == mHBlank and testBit(self.state.io.stat, 3)) or
-      (mode == mSearchingOam and testBit(self.state.io.stat, 5)) or
-      (mode == mVBlank and (testBit(self.state.io.stat, 4) or testBit(self.state.io.stat, 5)))
-  if not self.state.stateIR and stat:
-    self.mcu.raiseInterrupt(iLcdStat)
-  self.state.stateIR = stat
-
-  if (self.state.dma and 0x00ff) <= 0x009f:
-    self.mcu[(OamStartAddress.uint16 + (self.state.dma and 0x00ff)).MemAddress] = self.mcu[self.state.dma]
-    self.state.dma += 1
+  self.handleInterrupt()
+  self.dmaTransfer()
 
 
 proc pushHandler*(mcu: Mcu, self: Ppu) =
