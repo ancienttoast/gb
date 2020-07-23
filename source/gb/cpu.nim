@@ -10,7 +10,7 @@
 
 ]##
 import
-  std/[bitops, strutils, strformat],
+  std/[bitops, strutils, strformat, macros],
   mem, interrupt, util
 
 
@@ -141,13 +141,25 @@ func pop[T: uint16](self: var Sm83State, mem: var Mcu): T =
   result = result or (mem[self.sp - 1].uint16 shl 8)
 
 
+
+macro genOpName(def: untyped): untyped =
+  def.expectKind({nnkProcDef, nnkIdent})
+  if def.kind == nnkProcDef:
+    def[0].expectKind(nnkIdent)
+    def[0] = newIdentNode($def[0] & "Impl")
+    def
+  else:
+    newIdentNode($def & "Impl")
+
 template op(name, dur, body: untyped): untyped {.dirty.} =
+  proc name(opcode: uint8, cpu: var Sm83State, mem: var Mcu): InstructionInfo {.genOpName.} =
+    result.duration = dur
+    #result.dissasm = "?"
+    body
+
   const
     `name` = InstructionDefinition(
-      f: proc(opcode: uint8, cpu: var Sm83State, mem: var Mcu): InstructionInfo =
-        result.duration = dur
-        #result.dissasm = "?"
-        body
+      f: genOpName(name)
     )
 
 
@@ -206,7 +218,7 @@ op opJPccu16, 3:
     nn = cpu.nn(mem)
   if opcode.cc.test(cpu):
     cpu.pc = nn
-  #result.dissasm = &"JP {cc},{nn:#x}"
+  #result.dissasm = &"JP {opcode.cc},{nn:#x}"
 
 op opJRs8, 3:
   let
@@ -220,7 +232,7 @@ op opJRccs8, 2:
     e = cast[int8](cpu.readNext(mem))
   if opcode.cc.test(cpu):
     cpu.pc = (cpu.pc.int + e.int).uint16
-  #result.dissasm = &"JR {cc},{e:#x}"
+  #result.dissasm = &"JR {opcode.cc},{e:#x}"
 
 func opCall(cpu: var Sm83State, mem: var Mcu, nn: uint16) =
   cpu.push(mem, cpu.pc)
@@ -238,7 +250,7 @@ op opCALLccu16, 3:
     nn = cpu.nn(mem)
   if opcode.cc.test(cpu):
     opCall(cpu, mem, nn)
-  #result.dissasm = &"CALL {cc},{nn:#x}"
+  #result.dissasm = &"CALL {opcode.cc},{nn:#x}"
 
 op opRET, 4:
   cpu.pc = cpu.pop[:uint16](mem)
@@ -247,7 +259,7 @@ op opRET, 4:
 op opRETcc, 2: # 5
   if opcode.cc.test(cpu):
     cpu.pc = cpu.pop[:uint16](mem)
-  #result.dissasm = &"RET {cc}"
+  #result.dissasm = &"RET {opcode.cc}"
 
 op opRETI, 4:
   cpu.pc = cpu.pop[:uint16](mem)
@@ -1160,13 +1172,10 @@ func step*(self: var Sm83, mem: var Mcu): int {.discardable.} =
     return 1
 
   let
-    position = self.state.pc
     opcode = self.state.readNext(mem)
     instruction = OpcodeTable[opcode.int]
   let
     (cycles, dissasm) = instruction.f(opcode, self.state, mem)
-  #if self.state.pc > 0x0100'u16:
-  #  debugEcho &"{position:#06x}  {dissasm:<20} ({opcode:#04x}) {self.state}"
 
   if sfInterruptWait notin self.state.status:
     if sfInterruptEnable in self.state.status:
