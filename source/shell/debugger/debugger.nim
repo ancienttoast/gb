@@ -371,7 +371,10 @@ proc main*() =
       igSeparator()
 
       igCheckbox("gbRunning", addr gbRunning)
-      igText(&"{speed:6.2f}")
+      if isRUnning:
+        igText(&"{speed:6.2f}")
+      else:
+        igText("-")
       igEnd()
     
     if showDemo:
