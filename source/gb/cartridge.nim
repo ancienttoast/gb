@@ -82,7 +82,7 @@ const
   RomBankSize = 16_384
   RamBankSize = 8_192
   # TODO: use CartridgeRomSize somehow
-  RomSize: array[0..11, int] = [ 32_768, 65_536, 131_072, 262_144, 524_288, 1_048_576, 2_097_152, 4_194_304, 8_388_608, 1_179_648, 1_310_720, 1_572_864 ]
+  #RomSize: array[0..11, int] = [ 32_768, 65_536, 131_072, 262_144, 524_288, 1_048_576, 2_097_152, 4_194_304, 8_388_608, 1_179_648, 1_310_720, 1_572_864 ]
   RamSize: array[CartridgeRamSize, int] = [ 0, 2_048, 8_192, 32_768, 131_072, 65_536 ]
 
 
@@ -102,10 +102,9 @@ proc initMbcNone(mcu: Mcu, data: ptr string) =
       read: proc(address: MemAddress): uint8 =
         cast[uint8](data[address.int]),
       write: proc(address: MemAddress, value: uint8) =
-        discard,
-      area: MbcRom
+        discard
     )
-  mcu.pushHandler(handler)
+  mcu.setHandler(msRom, handler)
 
 
 
@@ -168,10 +167,9 @@ proc initMbc1(mcu: Mcu, state: ptr Mbc1State, rom: ptr string, ramSize: Cartridg
   let
     romHandler = MemHandler(
       read: romReadHandler,
-      write: romWriteHandler,
-      area: MbcRom
+      write: romWriteHandler
     )
-  mcu.pushHandler(romHandler)
+  mcu.setHandler(msRom, romHandler)
   if ramSize != crsNone:
     let
       ramHandler = MemHandler(
@@ -192,10 +190,8 @@ proc initMbc1(mcu: Mcu, state: ptr Mbc1State, rom: ptr string, ramSize: Cartridg
             p = (state.ramBank * RomBankSize) + (address - 0xa000)
           if p.int <= state.ram.high:
             state.ram[p] = value
-        ,
-        area: MbcRam
       )
-    mcu.pushHandler(ramHandler)
+    mcu.setHandler(msRam, ramHandler)
 
 
 
@@ -241,7 +237,7 @@ proc initCartridge*(rom: string): Cartridge =
     state: MbcState(kind: info.kind)
   )
 
-proc pushHandlers*(mcu: Mcu, cart: Cartridge) =
+proc setupMemHandler*(mcu: Mcu, cart: Cartridge) =
   case cart.info.kind:
   of ctRom:
     mcu.initMbcNone(addr cart.data)

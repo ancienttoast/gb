@@ -84,13 +84,13 @@ type
 const
   Registers*: array[Register16, array[2, Register8]] = [ [rA, rF], [rB, rC], [rD, rE], [rH, rL] ]
 
-proc pushHandler*(mcu: Mcu, self: Sm83) =
-  mcu.pushHandler(0xffff, cast[ptr uint8](addr self.state.ie))
-  mcu.pushHandler(0xff0f, cast[ptr uint8](addr self.state.`if`))
+proc setupMemHandler*(mcu: Mcu, self: Sm83) =
+  mcu.setHandler(msInterruptFlag, cast[ptr uint8](addr self.state.`if`))
+  mcu.setHandler(msInterruptEnabled, cast[ptr uint8](addr self.state.ie))
 
 proc newCpu*(mcu: Mcu): Sm83 =
   result = Sm83()
-  mcu.pushHandler(result)
+  mcu.setupMemHandler(result)
 
 
 template `[]`*(self: Sm83State, register: Register8): uint8 =
@@ -1175,7 +1175,7 @@ func step*(self: var Sm83, mem: var Mcu): int {.discardable.} =
     opcode = self.state.readNext(mem)
     instruction = OpcodeTable[opcode.int]
   let
-    (cycles, dissasm) = instruction.f(opcode, self.state, mem)
+    (cycles, _) = instruction.f(opcode, self.state, mem)
 
   if sfInterruptWait notin self.state.status:
     if sfInterruptEnable in self.state.status:

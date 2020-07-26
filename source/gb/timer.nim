@@ -67,29 +67,23 @@ proc step*(self: Timer) =
   if self.state.counter == TimerCycleCounter.high:
     self.state.counter = TimerCycleCounter.low
 
-proc pushHandler*(mcu: Mcu, self: Timer) =
-  mcu.pushHandler(
-    MemHandler(
-      read: proc(address: MemAddress): uint8 = self.state.divider,
-      write: proc(address: MemAddress, value: uint8) = self.state.divider = 0,
-      area: 0xff04.MemAddress..0xff04.MemAddress
-    )
-  )
-  mcu.pushHandler(
+proc setupMemHandler*(mcu: Mcu, self: Timer) =
+  mcu.setHandler(msTimer,
     MemHandler(
       read: proc(address: MemAddress): uint8 =
         case address
+        of 0xff04: self.state.divider
         of 0xff05: self.state.tima
         of 0xff06: self.state.tma
         of 0xff07: self.state.tac
         else: 0'u8,
       write: proc(address: MemAddress, value: uint8) =
         case address
+        of 0xff04: self.state.divider = 0
         of 0xff05: self.state.tima = value
         of 0xff06: self.state.tma = value
         of 0xff07: self.state.tac = value
-        else: discard,
-      area: 0xff05.MemAddress..0xff07.MemAddress
+        else: discard
     )
   )
 
@@ -99,4 +93,4 @@ proc newTimer*(): Timer =
 proc newTimer*(mcu: Mcu): Timer =
   result = newTimer()
   result.mcu = mcu
-  mcu.pushHandler(result)
+  mcu.setupMemHandler(result)

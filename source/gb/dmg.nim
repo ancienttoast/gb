@@ -18,23 +18,19 @@ type
   BootRom = ref object
     data: string
 
-proc pushHandler(mcu: Mcu, self: BootRom) =
+proc setupMemHandler(mcu: Mcu, self: BootRom) =
   let
     bootRomHandler = MemHandler(
       read: proc(address: MemAddress): uint8 = cast[uint8](self.data[address.int]),
-      write: proc(address: MemAddress, value: uint8) = discard,
-      area: 0.MemAddress ..< 256.MemAddress
+      write: proc(address: MemAddress, value: uint8) = discard
     )
     bootRomDisableHandler = MemHandler(
       read: proc(address: MemAddress): uint8 = 0,
       write: proc(address: MemAddress, value: uint8) =
-        mcu.popHandler()
-        mcu.popHandler()
-      ,
-      area: 0xff50.MemAddress .. 0xff50.MemAddress
+        mcu.clearHandler(msBootRom)
     )
-  mcu.pushHandler(bootRomHandler)
-  mcu.pushHandler(bootRomDisableHandler)
+  mcu.setHandler(msBootRom, bootRomHandler)
+  mcu.setHandler(msBootRomFlag, bootRomDisableHandler)
 
 proc newBootRom(bootRom: string): BootRom =
   result = BootRom(
@@ -112,17 +108,17 @@ proc load*(self: Gameboy, rom = "") =
   self.testMemory = newSeq[uint8](uint16.high.int + 1)
 
   self.mcu.clearHandlers()
-  self.mcu.pushHandler(0, addr self.testMemory)
-  self.mcu.pushHandler(self.cpu)
-  self.mcu.pushHandler(self.timer)
-  self.mcu.pushHandler(self.ppu)
-  self.mcu.pushHandler(self.joypad)
+  self.mcu.setHandler(msDebug, addr self.testMemory)
+  self.mcu.setupMemHandler(self.cpu)
+  self.mcu.setupMemHandler(self.timer)
+  self.mcu.setupMemHandler(self.ppu)
+  self.mcu.setupMemHandler(self.joypad)
   
   if rom != "":
     self.cart = initCartridge(rom)
-    self.mcu.pushHandlers(self.cart)
+    self.mcu.setupMemHandler(self.cart)
   if self.boot != nil:
-    self.mcu.pushHandler(self.boot)
+    self.mcu.setupMemHandler(self.boot)
   else:
     staticBoot(self.cpu, self.mcu)
 

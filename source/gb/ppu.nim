@@ -35,6 +35,9 @@
     Mode 0  Variable length, whatever it takes to reach 456 cycles
     Mode 1  456 * 10 = 4560 cycles
   
+  Dot frequency
+    4194304
+  
   Entire refresh
     (Search OAM + Transfer data + H-Blank) * 144 + V-Blank
     456 * 144 + 4560 = 70224
@@ -53,8 +56,6 @@ import
 const
   Width = 160
   Height = 144
-
-  DotFrequency = 4194304
 
   VramStartAddress = 0x8000
   OamStartAddress = 0xfe00
@@ -116,7 +117,7 @@ type
                       ##     bit 5-4 - _PpuGrayShades_ for color number 2
                       ##     bit 3-2 - _PpuGrayShades_ for color number 1
                       ##     bit 1-0 - _PpuGrayShades_ for color number 0
-    obp:     array[2, uint8]
+    obp:      array[2, uint8]
                       ## 0xff48  Object Palette Data (R/W) [DMG Only]
                       ##   Color number _PpuGrayShades_ translation sprite palette.
                       ##   Works exactly as _bgp_, except color number 0 is transparent.
@@ -348,25 +349,31 @@ proc step*(self: Ppu): bool {.discardable.} =
   self.dmaTransfer()
 
 
-proc pushHandler*(mcu: Mcu, self: Ppu) =
+proc setupMemHandler*(mcu: Mcu, self: Ppu) =
   let
-    dmaHandler = MemHandler(
-      read: proc(address: MemAddress): uint8 = 0,
+    ioHandler = createHandlerFor(msLcdIo, addr self.state.io)
+    lcdHandler = MemHandler(
+      read: proc(address: MemAddress): uint8 =
+        if address == 0xff46:
+          0'u8
+        else:
+          ioHandler.read(address),
       write: proc(address: MemAddress, value: uint8) =
-        self.state.dma = value.uint16 shl 8
-      ,
-      area: 0xff46.MemAddress..0xff46.MemAddress
+        if address == 0xff46:
+          self.state.dma = value.uint16 shl 8
+        else:
+          ioHandler.write(address, value)
     )
-  mcu.pushHandler(0xff40.MemAddress, addr self.state.io)
-  mcu.pushHandler(dmaHandler)
-  mcu.pushHandler(VramStartAddress, addr self.state.vram)
-  mcu.pushHandler(OamStartAddress, addr self.state.oam)
+  mcu.setHandler(msLcdIo, lcdHandler)
+  mcu.setHandler(msVRam, addr self.state.vram)
+  mcu.setHandler(msOam, addr self.state.oam)
+  self.mcu = mcu
 
 proc newPpu*(mcu: Mcu): Ppu =
   result = Ppu(
     mcu: mcu
   )
-  mcu.pushHandler(result)
+  mcu.setupMemHandler(result)
 
 
 

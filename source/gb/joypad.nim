@@ -50,8 +50,8 @@ func calcState(state: JoypadState): uint8 =
       setBit(result, i)
     
 
-proc pushHandler*(mcu: Mcu, joypad: Joypad) =
-  mcu.pushHandler MemHandler(
+proc setupMemHandler*(mcu: Mcu, joypad: Joypad) =
+  mcu.setHandler msJoypad, MemHandler(
     read: proc(address: MemAddress): uint8 =
       joypad.state.calcState()
     ,
@@ -60,13 +60,11 @@ proc pushHandler*(mcu: Mcu, joypad: Joypad) =
         joypad.state.mode = rmDirectionKeys
       elif testBit(value, 4):
         joypad.state.mode = rmButtonKeys
-    ,
-    area: 0xff00.MemAddress .. 0xff00.MemAddress
   )
 
 proc newJoypad*(mcu: Mcu): Joypad =
   result = Joypad()
-  mcu.pushHandler(result)
+  mcu.setupMemHandler(result)
 
 proc setKeyState*(self: Joypad, key: JoypadKey, state: bool) =
   self.state.keys[key] = state
