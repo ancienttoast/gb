@@ -1,6 +1,6 @@
 import
   sdl2,
-  gb/[dmg, cpu, ppu, joypad]
+  gb/[dmg, cpu, joypad], shell/render
 
 
 
@@ -83,6 +83,9 @@ proc main*() =
     renderer.clear()
     renderer.copy(texture, nil, nil)
     renderer.present()
+
+    if gameboy.cycles >= 733894900:
+      isOpen = false
 
   destroy texture
   destroy renderer

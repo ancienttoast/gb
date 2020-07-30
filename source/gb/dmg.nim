@@ -103,6 +103,7 @@ type
     boot: BootRom
     bootRom*: string
     testMemory*: seq[uint8]
+    cycles*: uint64
 
 proc load*(self: Gameboy, rom = "") =
   self.testMemory = newSeq[uint8](uint16.high.int + 1)
@@ -121,6 +122,8 @@ proc load*(self: Gameboy, rom = "") =
     self.mcu.setupMemHandler(self.boot)
   else:
     staticBoot(self.cpu, self.mcu)
+  
+  self.cycles = 0
 
 proc step*(self: Gameboy): bool =
   let
@@ -128,6 +131,7 @@ proc step*(self: Gameboy): bool =
   for i in 0..<cycles:
     self.timer.step()
     result = result or self.ppu.step()
+  self.cycles += cycles.uint64
 
 
 proc save*(self: Gameboy): DmgState =
@@ -156,7 +160,8 @@ proc newGameboy*(bootRom = ""): Gameboy =
     cpu: newCpu(mcu),
     timer: newTimer(mcu),
     ppu: newPpu(mcu),
-    joypad: newJoypad(mcu)
+    joypad: newJoypad(mcu),
+    cycles: 0
   )
   if bootRom != "":
     result.boot = newBootRom(bootRom)

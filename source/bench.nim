@@ -2,13 +2,13 @@ when defined(profiler):
   import nimprof
 
 import
-  gb/[dmg, cpu, ppu]
+  gb/[dmg, cpu], shell/render
 
 
 
 const
   BootRom = ""
-  Rom = staticRead("../123/gb-test-roms-master/cpu_instrs/cpu_instrs.gb")
+  Rom = staticRead("../123/Super Mario Land 2 - 6 Golden Coins (USA, Europe) (Rev B).gb")
 
 
 
@@ -26,3 +26,6 @@ while isRunning:
       isRunning = false
 
   discard gameboy.ppu.renderLcd()
+
+  if gameboy.cycles >= 733894900:
+    isRunning = false

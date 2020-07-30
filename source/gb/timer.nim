@@ -16,7 +16,7 @@
 
 ]##
 import
-  mem, interrupt
+  mem, interrupt, util
 
 
 
@@ -47,7 +47,7 @@ const
 
 
 proc isEnabled(self: Timer): bool =
-  (self.state.tac and 0b00000100) shr 2 == 1
+  self.state.tac.testBit(2)
 
 proc speed(self: Timer): int =
   TimerFrequencies[self.state.tac and 0b00000011]

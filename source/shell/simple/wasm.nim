@@ -1,6 +1,6 @@
 import
   sdl2,
-  gb/[dmg, cpu, ppu, joypad]
+  gb/[dmg, cpu, joypad], shell/render
 
 
 

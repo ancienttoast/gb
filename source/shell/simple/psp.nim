@@ -2,7 +2,7 @@ import
   pspsdk/[pspmoduleinfo, pspkerneltypes, psptypes, psploadexec, pspthreadman, pspdisplay],
   pspsdk/[pspgu, pspgum, pspctrl],
   imageman,
-  gb/[dmg, cpu, ppu, joypad]
+  gb/[dmg, joypad], shell/render
 
 
 

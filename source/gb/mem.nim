@@ -38,22 +38,22 @@ type
   MemArea = Slice[MemAddress]
 
   MemSlot* = enum
-    msRom              # 0x0000..0x7fff
-    msBootRom          # 0x0000..0x0100
-    msVRam             # 0x8000..0x9fff
-    msRam              # 0xa000..0xbfff
-    msWorkRam          # 0xc000..0xdfff
-    msEchoRam          # 0xe000..0xfdff
-    msOam              # 0xfe00..0xfe9f
-    msUnusable         # 0xfea0..0xfeff
-    msJoypad           # 0xff00..0xff00
-    msTimer            # 0xff04..0xff07
-    msInterruptFlag    # 0xff0f..0xff0f
-    msLcdIo            # 0xff40..0xff4f
-    msBootRomFlag      # 0xff50..0xff50
-    msHighRam          # 0xff80..0xfffe
-    msInterruptEnabled # 0xffff..0xffff
-    msDebug            # 0x0000..0xffff
+    msRom
+    msBootRom
+    msVRam
+    msRam
+    msWorkRam
+    msEchoRam
+    msOam
+    msUnusable
+    msJoypad
+    msTimer
+    msInterruptFlag
+    msLcdIo
+    msBootRomFlag
+    msHighRam
+    msInterruptEnabled
+    msDebug
 
 const
   MemSlotSize: array[MemSlot, MemArea] = [

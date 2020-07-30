@@ -1,8 +1,8 @@
 import
   std/[strformat, times, monotimes, options],
-  nimgl/[opengl, imgui], sdl2, impl_sdl, nimgl/imgui/impl_opengl,
+  opengl, nimgl/imgui, sdl2, impl_sdl, impl_opengl,
   imageman,
-  style, gb/[dmg, cpu, timer, ppu, joypad]
+  style, gb/[dmg, cpu, timer, ppu, joypad], shell/render
 
 when defined(profiler):
   import nimprof
@@ -217,7 +217,7 @@ proc main*() =
   assert glContext != nil
   discard glSetSwapInterval(0)
 
-  assert glInit()
+  loadExtensions()
 
   discard igCreateContext()
   assert igSdl2InitForOpenGL(window, glContext)
