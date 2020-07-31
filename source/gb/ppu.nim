@@ -289,11 +289,7 @@ proc transferStart(self: Ppu) =
 proc nextLine(self: Ppu) =
   self.state.io.ly += 1
   self.state.timer = 0
-
-  if self.state.io.ly == self.state.io.lyc:
-    setBit(self.state.io.stat, 2)
-  else:
-    clearBit(self.state.io.stat, 2)
+  self.state.io.stat.toggleBit(2, self.state.io.ly == self.state.io.lyc)
 
 proc handleInterrupt(self: Ppu) =
   let

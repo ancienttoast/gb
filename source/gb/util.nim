@@ -101,6 +101,12 @@ func setBits*[T: uint8 | uint16](bits: Slice[int]): T =
   for b in bits:
     result = result or (1.T shl b.T)
 
+func toggleBit*[T: uint8 | uint16](value: var T, bit: static[int], bitValue: bool) =
+  if bitValue:
+    value.setBit(bit)
+  else:
+    value.clearBit(bit)
+
 
 iterator count*(a, b: int): int =
   if a < b:
