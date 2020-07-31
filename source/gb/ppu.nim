@@ -48,7 +48,6 @@
 
 ]##
 import
-  imageman,
   mem, interrupt, util
 
 
