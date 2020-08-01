@@ -4,12 +4,22 @@ import
 
 
 
+#[
 const
   Colors: array[PpuGrayShade, ColorRGBU] = [
     [224'u8, 248, 208].ColorRGBU,
     [136'u8, 192, 112].ColorRGBU,
     [52'u8, 104, 86].ColorRGBU,
     [8'u8, 24, 32].ColorRGBU,
+  ]
+]#
+
+const
+  Colors: array[PpuGrayShade, ColorRGBU] = [
+    [0xFF'u8, 0xFF, 0xFF].ColorRGBU,
+    [0xAA'u8, 0xAA, 0xAA].ColorRGBU,
+    [0x55'u8, 0x55, 0x55].ColorRGBU,
+    [0x00'u8, 0x00, 0x00].ColorRGBU,
   ]
 
 proc tile(self: Ppu, tileAddress: int, gbPalette: uint8): Image[ColorRGBU] =
@@ -31,7 +41,7 @@ proc tile(self: Ppu, tileAddress: int, gbPalette: uint8): Image[ColorRGBU] =
 
 proc bgTile*(self: Ppu, tileNum: int): Image[ColorRGBU] =
   let
-    tilePos = self.state.bgTileAddress(tileNum.uint8)
+    tilePos = self.state.tileAddress(tileNum.uint8)
   self.tile(tilePos, self.state.io.bgp)
 
 proc renderTiles*(self: Ppu, b: range[0..2]): Image[ColorRGBU] =
@@ -48,7 +58,7 @@ proc renderBackground*(self: Ppu, drawGrid = true): Image[ColorRGBU] =
     h = MapSize*8
   result = initImage[ColorRGBU](w, h)
   for y in 0..<h:
-    for x, shade in bgLine(self.state, 0, y, w):
+    for x, shade in mapLine(self.state, 0, y, w, self.state.io.bgMapAddress().int - VramStartAddress):
       result[x, y] = Colors[shade]
   let
     min0 = [ self.state.io.scx.int, self.state.io.scy.int ]

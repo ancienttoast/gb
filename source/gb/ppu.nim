@@ -42,7 +42,7 @@
     (Search OAM + Transfer data + H-Blank) * 144 + V-Blank
     456 * 144 + 4560 = 70224
 
-  * `https://gbdev.gg8.se/wiki/articles/Video_Ppu`_
+  * `https://gbdev.io/pandocs/#video-display`_
   * `https://nnarain.github.io/2016/09/09/Gameboy-LCD-Controller.html`_
   * `https://www.reddit.com/r/EmuDev/comments/8uahbc/dmg_bgb_lcd_timings_and_cnt/e1iooum/`_
 
@@ -60,6 +60,7 @@ const
   OamStartAddress* = 0xfe00
 
   MapAddress = [ 0x9800, 0x9C00 ]
+  WindowAddress = [ 0x9800'u16, 0x9C00 ]
   MapSize* = 32
   TileAddress = [ 0x8800, 0x8000 ]
 
@@ -100,7 +101,7 @@ type
                       ##               1: During V-Blank
                       ##               2: During Searching OAM
                       ##               3: During Transferring Data to LCD Driver
-    scy, scx: uint8
+    scy, scx: uint8   ## 0xff42
     ly:       uint8   ## 0xff44  Y-Coordinate (R)
                       ##   The LY indicates the vertical line to which the present data is transferred to the LCD Driver.
                       ##   The LY can take on any value between 0 through 153. The values between 144 and 153 indicate
@@ -109,7 +110,7 @@ type
                       ##   The Gameboy permanently compares the value of the LYC and LY registers. When both values are
                       ##   identical, the coincident bit in the STAT register becomes set, and (if enabled) a STAT interrupt
                       ##   is requested.
-    dma:      uint8
+    dma:      uint8   ## 0xff46
     bgp:      uint8   ## 0xff47  BG Palette Data (R/W) [DMG Only]
                       ##   Color number _PpuGrayShades_ translation for BG and Window tiles.
                       ##     bit 7-6 - _PpuGrayShades_ for color number 3
@@ -120,7 +121,9 @@ type
                       ## 0xff48  Object Palette Data (R/W) [DMG Only]
                       ##   Color number _PpuGrayShades_ translation sprite palette.
                       ##   Works exactly as _bgp_, except color number 0 is transparent.
-    unk2:     array[6, uint8]
+    wy, wx:   uint8   ## 0xff4a
+    unk0:     array[4, uint8]
+                      ## 0xff4c
 
   PpuSpriteAttribute {.bycopy.} = tuple
     y, x:  uint8      ## Specifies the sprite position (x - 8, y - 16)
@@ -142,9 +145,10 @@ type
     io: PpuIoState
     vram: PpuVram
     oam: PpuOam
-    timer: range[0..457]
+    timer: range[0..456]
     stateIR: bool
     dma: uint16
+    currentWindowY: int
 
   Ppu* = ref object
     state*: PpuState
@@ -155,11 +159,17 @@ type
 func isEnabled(self: PpuIoState): bool =
   self.lcdc.testBit(7)
 
-func bgMapAddress(self: PpuIoState): MemAddress =
-  MapAddress[self.lcdc.testBit(3).int].MemAddress
+func windowMapAddress(self: PpuIoState): MemAddress =
+  WindowAddress[self.lcdc.testBit(6).int]
 
-func bgTileAddress(self: PpuIoState): MemAddress =
+func isWindowEnabled(self: PpuIoState): bool =
+  self.lcdc.testBit(5)
+
+func tileAddress(self: PpuIoState): MemAddress =
   TileAddress[self.lcdc.testBit(4).int].MemAddress
+
+func bgMapAddress*(self: PpuIoState): MemAddress =
+  MapAddress[self.lcdc.testBit(3).int].MemAddress
 
 func spriteSize(self: PpuIoState): bool =
   self.lcdc.testBit(2)
@@ -169,6 +179,7 @@ func isObjEnabled(self: PpuIoState): bool =
 
 func isBgEnabled(self: PpuIoState): bool =
   self.lcdc.testBit(0)
+
 
 func bgColorShade*(self: PpuIoState, colorNumber: range[0..3]): PpuGrayShade =
   (self.bgp shl (6 - colorNumber*2) shr 6).PpuGrayShade
@@ -208,9 +219,9 @@ func tileAddress(sprite: PpuSpriteAttribute, isBig: bool): int =
   0x8000 + tile*16
 
 
-func bgTileAddress*(state: PpuState, tileNum: uint8): int =
-  if state.io.bgTileAddress().int == 0x8000:
-    state.io.bgTileAddress().int + tileNum.int*16
+func tileAddress*(state: PpuState, tileNum: uint8): int =
+  if state.io.tileAddress().int == 0x8000:
+    state.io.tileAddress().int + tileNum.int*16
   else:
     0x9000 + (cast[int8](tileNum)).int*16
 
@@ -225,9 +236,8 @@ iterator tileLine(state: PpuState, tileAddress: int, line: int, palette: uint8, 
       c = (b1.getBit(j) shl 1) or b0.getBit(j)
     yield palette.shade(c)
 
-iterator bgLine*(state: PpuState, x, y: int, width: int): tuple[x: int, shade: PpuGrayShade] =
+iterator mapLine*(state: PpuState, x, y: int, width: int, mapAddress: int): tuple[x: int, shade: PpuGrayShade] =
   let
-    mapAddress = state.io.bgMapAddress().int - VramStartAddress
     tileY = (y div 8).wrap32
     startY = y mod 8
   var
@@ -240,7 +250,7 @@ iterator bgLine*(state: PpuState, x, y: int, width: int): tuple[x: int, shade: P
       let
         tile = tileY*MapSize + tileX
         tileNum = state.vram[mapAddress + tile]
-        tileAddress = state.bgTileAddress(tileNum)
+        tileAddress = state.tileAddress(tileNum)
       for shade in state.tileLine(tileAddress, startY, state.io.bgp, startX):
         yield (x: col, shade: shade)
         col += 1
@@ -250,6 +260,8 @@ iterator bgLine*(state: PpuState, x, y: int, width: int): tuple[x: int, shade: P
       startX = 0
 
 iterator objLine*(state: PpuState, x, y: int, width: int): tuple[x: int, shade: PpuGrayShade, priority: bool] =
+  var
+    usedColumns: array[MapSize*8, bool]
   for sprite in state.oam:
     if not sprite.isVisible:
       continue
@@ -270,21 +282,35 @@ iterator objLine*(state: PpuState, x, y: int, width: int): tuple[x: int, shade: 
     if sprite.isYFlipped: line = height - 1 - line
     var i = f
     for shade in state.tileLine(tileAddress, line, state.io.obp[sprite.palette], f - sx, sprite.isXFlipped):
-      yield (x: i, shade: shade, priority: sprite.priority)
+      if not usedColumns[sprite.x.int]:
+        yield (x: i, shade: shade, priority: sprite.priority)
       i += 1
       if i == t:
         break
+    
+    usedColumns[sprite.x.int] = true
 
 proc transferStart(self: Ppu) =
+  let
+    y = self.state.io.ly.int
   self.state.io.mode = mDataTransfer
+
   if self.state.io.isBgEnabled():
-    for x, shade in self.state.bgLine(self.state.io.scx.int, self.state.io.scy.int + self.state.io.ly.int, Width):
-      self.buffer[self.state.io.ly.int][x] = shade
+    for x, shade in self.state.mapLine(self.state.io.scx.int, self.state.io.scy.int + y, Width, self.state.io.bgMapAddress().int - VramStartAddress):
+      self.buffer[y][x] = shade
+
+  if self.state.io.isWindowEnabled() and self.state.io.wx.int <= 166 and self.state.io.wy.int <= 143:
+    let
+      wx = self.state.io.wx.int - 7
+    if y >= self.state.io.wy.int:
+      for x, shade in self.state.mapLine(0, self.state.currentWindowY, (Width - wx), self.state.io.windowMapAddress().int - VramStartAddress):
+        self.buffer[y][wx + x] = shade
+      self.state.currentWindowY += 1
 
   if self.state.io.isObjEnabled():
-    for x, shade, priority in self.state.objLine(0, self.state.io.ly.int, Width):
-      if (not priority or self.buffer[self.state.io.ly.int][x] == gsWhite) and shade != gsWhite:
-        self.buffer[self.state.io.ly.int][x] = shade
+    for x, shade, priority in self.state.objLine(0, y, Width):
+      if (not priority or self.buffer[y][x] == gsWhite) and shade != gsWhite:
+        self.buffer[y][x] = shade
 
 proc nextLine(self: Ppu) =
   self.state.io.ly += 1
@@ -309,7 +335,7 @@ proc dmaTransfer(self: Ppu) =
 
 proc step*(self: Ppu): bool {.discardable.} =
   self.state.timer += 1
-  if self.state.timer > 456:
+  if self.state.timer >= 456:
     self.nextLine()
 
   case self.state.io.ly
@@ -321,10 +347,7 @@ proc step*(self: Ppu): bool {.discardable.} =
     of 80:
       # mDataTransfer: start
       self.transferStart()
-    of 81..247:
-      # mDataTransfer
-      discard
-    of 248..455:
+    of 248:
       # mHBlank
       self.state.io.mode = mHBlank
     else:
@@ -333,6 +356,7 @@ proc step*(self: Ppu): bool {.discardable.} =
     # mVBlank: start
     self.state.io.mode = mVBlank
     self.mcu.raiseInterrupt(iVBlank)
+    self.state.currentWindowY = 0
   of 154:
     # mVBlank: end
     self.state.io.ly = 0
