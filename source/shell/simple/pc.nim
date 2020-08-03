@@ -1,12 +1,6 @@
 import
   sdl2,
-  gb/[dmg, cpu, joypad], shell/render
-
-
-
-const
-  BootRom = ""
-  Rom = staticRead("../123/gb-test-roms-master/cpu_instrs/cpu_instrs.gb")
+  gb/[dmg, joypad]
 
 
 
@@ -28,18 +22,16 @@ proc main*() =
   assert texture != nil
 
   var
-    gameboy = newGameboy(BootRom)
+    gameboy = init()
     isRunning = true
-    isOpen = true
-  gameboy.load(Rom)
 
-  while isOpen:
+  while isRunning:
     var
       event: sdl2.Event
     while sdl2.pollEvent(event).bool:
       case event.kind
       of QuitEvent:
-        isOpen = false
+        isRunning = false
       of KeyDown, KeyUp:
         let
           m = cast[KeyboardEventPtr](addr event)
@@ -54,29 +46,15 @@ proc main*() =
         of SDL_SCANCODE_RIGHT: gameboy.joypad[kRight] = m.state == KeyPressed.uint8
         of SDL_SCANCODE_ESCAPE:
           if m.state == KeyReleased.uint8:
-            isOpen = false
+            isRunning = false
         else:
           discard
       else:
         discard
 
-    if isRunning:
-      try:
-        var
-          needsRedraw = false
-        while not needsRedraw and isRunning:
-          needsRedraw = needsRedraw or gameboy.step()
-      except:
-        echo getCurrentException().msg
-        echo getStackTrace(getCurrentException())
-        echo "cpu\t", gameboy.cpu.state
-        isRunning = false
-
-    var
-      painter = initPainter(PaletteDefault)
-      image = painter.renderLcd(gameboy.ppu)
     let
-      r = texture.updateTexture(nil, addr image.data[0], Width * 3).int
+      image = gameboy.frame(isRunning)
+      r = texture.updateTexture(nil, unsafeAddr image.data[0], Width * 3).int
     if r != 0:
       echo sdl2.getError()
 
@@ -84,9 +62,6 @@ proc main*() =
     renderer.clear()
     renderer.copy(texture, nil, nil)
     renderer.present()
-
-    if gameboy.cycles >= 733894900:
-      isOpen = false
 
   destroy texture
   destroy renderer

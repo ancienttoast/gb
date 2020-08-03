@@ -2,13 +2,7 @@ import
   pspsdk/[pspmoduleinfo, pspkerneltypes, psptypes, psploadexec, pspthreadman, pspdisplay],
   pspsdk/[pspgu, pspgum, pspctrl],
   imageman,
-  gb/[dmg, joypad], shell/render
-
-
-
-const
-  BootRom = ""
-  Rom = staticRead("../123/gb-test-roms-master/cpu_instrs/cpu_instrs.gb")
+  gb/[dmg, joypad]
 
 
 
@@ -127,9 +121,8 @@ proc main*() =
   discard sceGuDisplay(GU_TRUE)
 
   var
-    gameboy = newGameboy(BootRom)
+    gameboy = init()
     isRunning = true
-  gameboy.load(Rom)
   while isOpen:
     var
       pad: SceCtrlData
@@ -143,18 +136,8 @@ proc main*() =
     gameboy.joypad[kDown] = (pad.Buttons and PSP_CTRL_DOWN.cuint) != 0.cuint
     gameboy.joypad[kRight] = (pad.Buttons and PSP_CTRL_RIGHT.cuint) != 0.cuint
 
-    if isRunning:
-      try:
-        var
-          needsRedraw = false
-        while not needsRedraw and isRunning:
-          needsRedraw = needsRedraw or gameboy.step()
-      except:
-        isRunning = false
-    
-    var
-      painter = initPainter(PaletteDefault)
-      image = painter.renderLcd(gameboy.ppu)
+    let
+      image = gameboy.frame(isRunning)
     for x in 0..<160:
       for y in 0..<144:
         let
