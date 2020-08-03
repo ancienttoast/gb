@@ -1,7 +1,7 @@
 import
   std/[unittest, strformat, os],
   nimPNG, imageman,
-  gb/[dmg, cpu, ppu]
+  gb/[dmg, cpu, ppu], shell/render
 
 
 
@@ -28,14 +28,14 @@ template testFull(name: string, rom: string, expected: string, stop: int) =
   test name:
     var
       gameboy = newGameboy("")
-    gameboy.load(readFile("tests/full/" & rom))
+    gameboy.load(readFile("tests/rom/" & rom))
 
     while gameboy.cpu.state.pc != stop:
       discard gameboy.step()
 
     let
-      result = gameboy.ppu.renderLcd()
-    checkLcd("tests/full/" & expected, result)
+      result = initPainter(PaletteDefault).renderLcd(gameboy.ppu)
+    checkLcd("tests/rom/blargg/" & expected, result)
 
 template testCpu(file: string, stop: int) =
   let
