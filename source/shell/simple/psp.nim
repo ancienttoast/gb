@@ -153,7 +153,8 @@ proc main*() =
         isRunning = false
     
     var
-      image = gameboy.ppu.renderLcd()
+      painter = initPainter(PaletteDefault)
+      image = painter.renderLcd(gameboy.ppu)
     for x in 0..<160:
       for y in 0..<144:
         let

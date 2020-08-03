@@ -97,6 +97,8 @@ type
     oamTextures: array[40, Texture]
 
 proc draw(self: PpuWindow, ppu: Ppu) =
+  let
+    painter = initPainter(PaletteDefault)
   igSetNextWindowPos(ImVec2(x: 745, y: 24), FirstUseEver)
   igSetNextWindowSize(ImVec2(x: 530, y: 570), FirstUseEver)
   igBegin("Ppu", flags = ImGuiWindowFlags.NoResize or ImGuiWindowFlags.NoCollapse)
@@ -104,20 +106,20 @@ proc draw(self: PpuWindow, ppu: Ppu) =
     if igBeginTabBar("display"):
       if igBeginTabItem("BG map"):
         let
-          image = ppu.renderBackground(drawGrid = false)
+          image = painter.renderBackground(ppu, drawGrid = false)
         self.bgTexture.upload(image)
         igTexture(self.bgTexture, 2)
         igEndTabItem()
       if igBeginTabItem("Sprite map"):
         let
-          image = ppu.renderSprites()
+          image = painter.renderSprites(ppu)
         self.spriteTexture.upload(image)
         igTexture(self.spriteTexture, 2)
         igEndTabItem()
       if igBeginTabItem("Tile map"):
         for i in 0..2:
           let
-            image = ppu.renderTiles(i)
+            image = painter.renderTiles(ppu, i)
           self.tileMapTextures[i].upload(image)
           igTexture(self.tileMapTextures[i], 2)
         igEndTabItem()
@@ -131,7 +133,7 @@ proc draw(self: PpuWindow, ppu: Ppu) =
             if igIsWindowHovered():
               selected = i
             let
-              tile = ppu.bgTile(oam.tile.int)
+              tile = painter.bgTile(ppu, oam.tile.int)
             self.oamTextures[i].upload(tile)
             igTexture(self.oamTextures[i], 2)
             igSameLine()
@@ -334,7 +336,8 @@ proc main*() =
     igBegin(&"Main", flags = ImGuiWindowFlags.NoResize or ImGuiWindowFlags.NoCollapse)
     if not igIsWindowCollapsed():
       let
-        image = gameboy.ppu.renderLcd()
+        painter = initPainter(PaletteDefault)
+        image = painter.renderLcd(gameboy.ppu)
       mainTexture.upload(image)
       igImage(cast[pointer](mainTexture.texture), ImVec2(x: mainTexture.width.float32 * 2, y: mainTexture.height.float32 * 2))
     igEnd()

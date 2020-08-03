@@ -25,7 +25,7 @@ while isRunning:
     if gameboy.cpu.state.pc == 0x06f1:
       isRunning = false
 
-  discard gameboy.ppu.renderLcd()
+  discard initPainter(PaletteDefault).renderLcd(gameboy.ppu)
 
   if gameboy.cycles >= 733894900:
     isRunning = false

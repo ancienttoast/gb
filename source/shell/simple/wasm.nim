@@ -89,7 +89,8 @@ proc main*() =
         isRunning = false
 
     var
-      image = gameboy.ppu.renderLcd()
+      painter = initPainter(PaletteDefault)
+      image = painter.renderLcd(gameboy.ppu)
     let
       r = texture.updateTexture(nil, addr image.data[0], Width * 3).int
     if r != 0:
