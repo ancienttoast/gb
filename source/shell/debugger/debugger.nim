@@ -1,8 +1,8 @@
 import
-  std/[strformat, times, monotimes, options],
+  std/[strformat, times, monotimes, options, streams],
   opengl, nimgl/imgui, sdl2, impl_sdl, impl_opengl,
   imageman,
-  style, gb/[dmg, cpu, timer, ppu, joypad], shell/render
+  style, gb/[dmg, cpu, mem, timer, ppu, joypad], shell/render
 
 when defined(profiler):
   import nimprof
@@ -13,8 +13,8 @@ const
   #BootRom = "123/[BIOS] Nintendo Game Boy Boot ROM (World).gb"
   BootRom = ""
   #Rom = "123/gb-test-roms-master/cpu_instrs/individual/02-interrupts.gb"
-  #Rom = "123/Zelda no Densetsu - Yume o Miru Shima (Japan) (Rev A).gb"
-  Rom = "123/dmg-acid2.gb"
+  Rom = "123/Super Mario Land 2 - 6 Golden Coins (USA, Europe) (Rev B).gb"
+  #Rom = "123/dmg-acid2.gb"
 
 
 
@@ -75,11 +75,11 @@ proc cpuWindow(state: CpuState) =
 
     igTextDisabled("ie")
     igSameLine()
-    igText(&"{state.ie}")
+    igText(&"{cast[uint8](state.ie):#04x} {state.ie}")
 
     igTextDisabled("if")
     igSameLine()
-    igText(&"{state.`if`}")
+    igText(&"{cast[uint8](state.`if`):#04x} {state.`if`}")
 
     igSeparator()
 
@@ -373,8 +373,29 @@ proc main*() =
       
       igSeparator()
 
+      if igButton("Dump memory"):
+        let
+          s = newFileStream("memdump.txt", fmWrite)
+        var
+          i = 0
+        for address in 0..0xffff:
+          if i == 0:
+            s.write(&"{address:#06x}\t")
+          s.write(&"{gameboy.mcu[address.MemAddress]:02x}")
+          i += 1
+          if i == 8:
+            s.write("\t")
+          else:
+            s.write(" ")
+          if i == 16:
+            s.write("\n")
+            i = 0
+
+
+      igSeparator()
+
       igCheckbox("gbRunning", addr gbRunning)
-      if isRUnning:
+      if isRunning:
         igText(&"{speed:6.2f}")
       else:
         igText("-")
