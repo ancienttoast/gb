@@ -334,6 +334,9 @@ proc dmaTransfer(self: Ppu) =
     self.state.dma += 1
 
 proc step*(self: Ppu): bool {.discardable.} =
+  if not self.state.io.isEnabled:
+    return false
+
   self.state.timer += 1
   if self.state.timer >= 456:
     self.nextLine()
