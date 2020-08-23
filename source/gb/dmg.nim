@@ -128,6 +128,7 @@ proc load*(self: Gameboy, rom = "") =
 proc step*(self: Gameboy): bool =
   let
     cycles = self.cpu.step(self.mcu)
+  self.cart.step(cycles)
   for i in 0..<cycles:
     self.timer.step()
     result = result or self.ppu.step()
