@@ -5,7 +5,6 @@
   * `https://pastraiser.com/cpu/gameboy/gameboy_opcodes.html`_
   * `https://robdor.com/2016/08/10/gameboy-emulator-half-carry-flag/`_
   * `https://stackoverflow.com/a/57981912`_
-  * `https://pastraiser.com/cpu/gameboy/gameboy_opcodes.htm`_
   * `http://forums.nesdev.com/viewtopic.php?f=20&t=15944#p196282`_
 
 ]##
