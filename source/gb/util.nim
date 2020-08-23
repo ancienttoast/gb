@@ -22,58 +22,73 @@ proc `?=`*[T](self: var set[T], value: tuple[doInclude: bool, other: set[T]]) =
 
 
 
-proc swapEndian64*(outp, inp: pointer) =
+# Required for older gcc versions wich don't yet support the built-in endian swapping
+# functions used by std/endians. E.g: the gcc version used by the psp devkit
+when defined(useSoftwareEndianSwap):
+  proc swapEndian64*(outp, inp: pointer) =
+      ## copies `inp` to `outp` swapping bytes. Both buffers are supposed to
+      ## contain at least 8 bytes.
+      var i = cast[cstring](inp)
+      var o = cast[cstring](outp)
+      o[0] = i[7]
+      o[1] = i[6]
+      o[2] = i[5]
+      o[3] = i[4]
+      o[4] = i[3]
+      o[5] = i[2]
+      o[6] = i[1]
+      o[7] = i[0]
+
+  proc swapEndian32*(outp, inp: pointer) =
     ## copies `inp` to `outp` swapping bytes. Both buffers are supposed to
-    ## contain at least 8 bytes.
+    ## contain at least 4 bytes.
     var i = cast[cstring](inp)
     var o = cast[cstring](outp)
-    o[0] = i[7]
-    o[1] = i[6]
-    o[2] = i[5]
-    o[3] = i[4]
-    o[4] = i[3]
-    o[5] = i[2]
-    o[6] = i[1]
-    o[7] = i[0]
+    o[0] = i[3]
+    o[1] = i[2]
+    o[2] = i[1]
+    o[3] = i[0]
 
-proc swapEndian32*(outp, inp: pointer) =
-  ## copies `inp` to `outp` swapping bytes. Both buffers are supposed to
-  ## contain at least 4 bytes.
-  var i = cast[cstring](inp)
-  var o = cast[cstring](outp)
-  o[0] = i[3]
-  o[1] = i[2]
-  o[2] = i[1]
-  o[3] = i[0]
+  proc swapEndian16*(outp, inp: pointer) =
+    ## copies `inp` to `outp` swapping bytes. Both buffers are supposed to
+    ## contain at least 2 bytes.
+    var i = cast[cstring](inp)
+    var o = cast[cstring](outp)
+    o[0] = i[1]
+    o[1] = i[0]
 
-proc swapEndian16*(outp, inp: pointer) =
-  ## copies `inp` to `outp` swapping bytes. Both buffers are supposed to
-  ## contain at least 2 bytes.
-  var i = cast[cstring](inp)
-  var o = cast[cstring](outp)
-  o[0] = i[1]
-  o[1] = i[0]
-
-when system.cpuEndian == bigEndian:
-  proc littleEndian64*(outp, inp: pointer) {.inline.} = swapEndian64(outp, inp)
-  proc littleEndian32*(outp, inp: pointer) {.inline.} = swapEndian32(outp, inp)
-  proc littleEndian16*(outp, inp: pointer) {.inline.} = swapEndian16(outp, inp)
-  proc bigEndian64*(outp, inp: pointer) {.inline.} = copyMem(outp, inp, 8)
-  proc bigEndian32*(outp, inp: pointer) {.inline.} = copyMem(outp, inp, 4)
-  proc bigEndian16*(outp, inp: pointer) {.inline.} = copyMem(outp, inp, 2)
+  when system.cpuEndian == bigEndian:
+    proc littleEndian64*(outp, inp: pointer) {.inline.} = swapEndian64(outp, inp)
+    proc littleEndian32*(outp, inp: pointer) {.inline.} = swapEndian32(outp, inp)
+    proc littleEndian16*(outp, inp: pointer) {.inline.} = swapEndian16(outp, inp)
+    proc bigEndian64*(outp, inp: pointer) {.inline.} = copyMem(outp, inp, 8)
+    proc bigEndian32*(outp, inp: pointer) {.inline.} = copyMem(outp, inp, 4)
+    proc bigEndian16*(outp, inp: pointer) {.inline.} = copyMem(outp, inp, 2)
+  else:
+    proc littleEndian64*(outp, inp: pointer) {.inline.} = copyMem(outp, inp, 8)
+    proc littleEndian32*(outp, inp: pointer) {.inline.} = copyMem(outp, inp, 4)
+    proc littleEndian16*(outp, inp: pointer){.inline.} = copyMem(outp, inp, 2)
+    proc bigEndian64*(outp, inp: pointer) {.inline.} = swapEndian64(outp, inp)
+    proc bigEndian32*(outp, inp: pointer) {.inline.} = swapEndian32(outp, inp)
+    proc bigEndian16*(outp, inp: pointer) {.inline.} = swapEndian16(outp, inp)
 else:
-  proc littleEndian64*(outp, inp: pointer) {.inline.} = copyMem(outp, inp, 8)
-  proc littleEndian32*(outp, inp: pointer) {.inline.} = copyMem(outp, inp, 4)
-  proc littleEndian16*(outp, inp: pointer){.inline.} = copyMem(outp, inp, 2)
-  proc bigEndian64*(outp, inp: pointer) {.inline.} = swapEndian64(outp, inp)
-  proc bigEndian32*(outp, inp: pointer) {.inline.} = swapEndian32(outp, inp)
-  proc bigEndian16*(outp, inp: pointer) {.inline.} = swapEndian16(outp, inp)
+  import std/endians
 
-proc littleEndian*(value: uint16): uint16 =
-  littleEndian16(addr result, unsafeAddr value)
+proc littleEndian*[T: uint16 | uint32 | uint64](value: T): T =
+  when T is uint16:
+    littleEndian16(addr result, unsafeAddr value)
+  elif T is uint32:
+    littleEndian32(addr result, unsafeAddr value)
+  elif T is uint64:
+    littleEndian64(addr result, unsafeAddr value)
 
-proc bigEndian*(value: uint16): uint16 =
-  bigEndian16(addr result, unsafeAddr value)
+proc bigEndian*[T: uint16 | uint32 | uint64](value: T): T =
+  when T is uint16:
+    bigEndian16(addr result, unsafeAddr value)
+  elif T is uint32:
+    bigEndian32(addr result, unsafeAddr value)
+  elif T is uint64:
+    bigEndian64(addr result, unsafeAddr value)
 
 
 
@@ -87,7 +102,7 @@ func setBit*[T: uint8 | uint16 | int](value: var T, bit: static[int]) =
 func getBit*[T: uint8 | uint16 | int](value: T, bit: int): T =
   (value shr bit) and 0b00000001
 
-func clearBit*[T: uint8 | uint16 | int](value: var T, bit: static[int]) =
+func clearBit*[T: uint8 | uint16 | uint32 | int](value: var T, bit: static[int]) =
   const
     Mask = 1.T shl bit
   value = value and not Mask

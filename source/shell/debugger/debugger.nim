@@ -10,10 +10,8 @@ when defined(profiler):
 
 
 const
-  #BootRom = "123/[BIOS] Nintendo Game Boy Boot ROM (World).gb"
   BootRom = ""
-  #Rom = "123/gb-test-roms-master/cpu_instrs/individual/02-interrupts.gb"
-  Rom = "123/Super Mario Land 2 - 6 Golden Coins (USA, Europe) (Rev B).gb"
+  Rom = "123/games/gb/Super Mario Land 2 - 6 Golden Coins (USA, Europe) (Rev B).gb"
   #Rom = "123/dmg-acid2.gb"
 
 

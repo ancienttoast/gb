@@ -8,7 +8,7 @@ import
 
 const
   BootRom = ""
-  Rom = staticRead("../123/gb-test-roms-master/cpu_instrs/cpu_instrs.gb")
+  Rom = staticRead("../tests/rom/blargg/cpu_instrs/cpu_instrs.gb")
 
 proc init(): Gameboy =
   result = newGameboy(BootRom)
