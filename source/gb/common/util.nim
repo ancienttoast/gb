@@ -129,7 +129,6 @@ func extract*[T: uint8 | uint16 | uint32](value: T, a, b: static[int]): T =
   (value shr bits.a) and Mask
 
 
-
 iterator count*[T](slice: Slice[T]): int =
   if slice.a < slice.b:
     for i in slice: yield i
