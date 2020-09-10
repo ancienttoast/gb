@@ -2,7 +2,7 @@ when defined(profiler):
   import nimprof
 
 import
-  gb/[dmg, cpu], shell/render
+  gb/dmg/[dmg, cpu], shell/render
 
 
 

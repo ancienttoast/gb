@@ -2,7 +2,7 @@ import
   std/[strformat, times, monotimes, options, streams],
   opengl, nimgl/imgui, sdl2, impl_sdl, impl_opengl,
   imageman,
-  style, gb/[dmg, cpu, mem, timer, ppu, joypad], shell/render
+  style, gb/dmg/[dmg, cpu, mem, timer, ppu, joypad], shell/render
 
 when defined(profiler):
   import nimprof

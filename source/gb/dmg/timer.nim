@@ -16,7 +16,7 @@
 
 ]##
 import
-  mem, interrupt, util
+  gb/common/util, mem, interrupt
 
 
 

@@ -3,7 +3,7 @@ when defined(profiler):
 
 import
   imageman,
-  gb/dmg, shell/render
+  gb/dmg/dmg, shell/render
 
 
 const

@@ -1,7 +1,7 @@
 import
   std/unittest,
   nimPNG, imageman,
-  gb/dmg, shell/render
+  gb/dmg/dmg, shell/render
 
 
 

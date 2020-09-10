@@ -1,6 +1,6 @@
 import
   imageman,
-  gb/[ppu, util]
+  gb/common/util, gb/dmg/ppu
 
 
 

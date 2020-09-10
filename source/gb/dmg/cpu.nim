@@ -10,7 +10,8 @@
 ]##
 import
   std/[bitops, strutils, strformat, macros],
-  mem, interrupt, util
+  gb/common/util,
+  mem, interrupt
 
 
 

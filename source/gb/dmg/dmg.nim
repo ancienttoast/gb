@@ -10,7 +10,7 @@
 ]##
 import
   std/times,
-  gb/[mem, cpu, timer, ppu, cartridge, joypad]
+  mem, cpu, timer, ppu, cartridge, joypad
 
 
 

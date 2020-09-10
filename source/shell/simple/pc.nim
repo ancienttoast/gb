@@ -1,6 +1,6 @@
 import
   sdl2,
-  gb/[dmg, joypad]
+  gb/dmg/[dmg, joypad]
 
 
 
