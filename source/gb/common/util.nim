@@ -134,3 +134,9 @@ iterator count*[T](slice: Slice[T]): int =
     for i in slice: yield i
   else:
     for i in countdown(slice.a, slice.b): yield i
+
+
+func signExtend*[T](x: T, bits: static[int]): T =
+  const
+    m = (1 shl (bits - 1)).T
+  (x xor m) - m

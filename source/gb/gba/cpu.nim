@@ -275,46 +275,6 @@ func `ashr`*[T: uint32](x: T, n: uint): T =
 
 
 
-#[
-
-  Branch Instructions
-
-]#
-proc opArmBxDecode(cpu: var Arm7tdmiState, opcode: ArmInstruction): tuple[rn: int] =
-  result.rn = (opcode and 0b1111).int
-  assert result.rn != 15, "Using R15 as BX operand result in undefined behaviour"
-
-proc opArmBxExecute(cpu: var Arm7tdmiState, data: tuple[rn: int]) =
-  let
-    value = cpu.reg(data.rn)
-    asThumb = value.testBit(0)
-  if asThumb:
-    cpu.instructions = isThumb
-  else:
-    cpu.instructions = isArm
-  cpu.pc = value
-  cpu.pc.clearBit(0)
-  # TODO: 2S + 1N cycles
-
-proc opArmBx(cpu: var Arm7tdmiState, opcode: ArmInstruction) =
-  let
-    data = cpu.opArmBxDecode(opcode)
-  cpu.opArmBxExecute(data)
-  # TODO: 2S + 1N cycles
-
-
-proc opArmB(cpu: var Arm7tdmiState, instr: ArmInstruction) =
-  let
-    offset = instr.extract(0, 23).int32 * 4
-    isLink = instr.testBit(24)
-  if isLink:
-    cpu.lr = cpu.pc - ArmInstructionSize
-  debugEcho cpu.pc.int, " + ", offset.int, " = ", (cpu.pc.int + offset.int)
-  cpu.pc = (cpu.pc.int + offset.int).uint32
-  # TODO: 2S + 1N cycles
-
-
-
 func opcode*(instr: ArmInstruction): uint32 =
   instr.extract(21, 24)
 
@@ -350,27 +310,35 @@ func rm*(instr: ArmInstruction): int =
   instr.extract(0, 3).int
 
 
+
+
+
+#[ ######################################################################################
+
+    ALU instructions
+
+]# ######################################################################################
 type
   OpMnemonic = enum
-    omAND, omEOR, omSUB, omRSB, omADD, omADC, omSBC, omRSC, omTST, omTEQ, omCMP, omCMN, omORR, omMOV, omBIC, omMVN,
+    omAND, omEOR, omSUB, omRSB, omADD, omADC, omSBC, omRSC, omTST, omTEQ, omCMP, omCMN, omORR, omMOV, omBIC, omMVN
     omB
     omBL
     omBX
     omCDP
     omLDC
-    omLDM
-    omLDR
+    omLDM, omSTM
+    omLDR, omSTR
+    omLDRH, omSTRH, omLDRSB, omLDRSH
     omMCR
     omMLA
     omMRC
-    omMRS
-    omMSR
+    omMRS, omMSR
     omMUL
     omSTC
-    omSTM
-    omSTR
     omSWI
     omSWP
+  
+  Register = range[0..15]
 
   OpAluOperand = object
     case isImmediate: bool
@@ -383,8 +351,8 @@ type
 
   OpAlu = object
     s: bool
-    rn: range[0..15]
-    rd: range[0..15]
+    rn: Register
+    rd: Register
     operand2: OpAluOperand
   
   ArmOp = object
@@ -393,7 +361,10 @@ type
     of omAND..omMVN:
       alu: OpAlu
     else:
-      discard
+      # TODO: parse these as well
+      instr: ArmInstruction
+
+proc decode[T](instr: ArmInstruction): T {.inline.}
 
 proc decode(instr: ArmInstruction, op: var OpAluOperand) =
   op =
@@ -419,11 +390,51 @@ proc decode(instr: ArmInstruction, op: var OpAlu) =
   instr.decode(op.operand2)
 
 proc decode(instr: ArmInstruction, op: var ArmOp) =
-  op = ArmOp(
-    condition: (instr shr 28).Condition,
-    kind: instr.extract(21, 24).OpMnemonic
-  )
-  instr.decode(op.alu)
+  if (instr and 0b0000_0001_0010_1111_1111_1111_0001_0000) == 0b0000_0001_0010_1111_1111_1111_0001_0000:
+    op = ArmOp(
+      kind: omBX,
+      instr: instr
+    )
+  elif (instr and 0b0000_1010_0000_0000_0000_0000_0000_0000) == 0b0000_1010_0000_0000_0000_0000_0000_0000:
+    op = ArmOp(
+      kind: omB,
+      instr: instr
+    )
+  elif (instr and 0b0000_1110_0000_0000_0000_0000_0000_0000) == 0b0000_1000_0000_0000_0000_0000_0000_0000:
+    # Block Data Transfer (LDM, STM)
+    op = ArmOp(
+      kind: omLDM,
+      instr: instr
+    )
+  elif (instr and 0b0000_1110_0000_0000_0000_0000_1001_0000) == 0b0000_0000_0000_0000_0000_0000_1001_0000:
+    # Halfword and Signed Data Transfer (LDRH, STRH, LDRSB, LDRSH)
+    op = ArmOp(
+      kind: omLDRH,
+      instr: instr
+    )
+  elif (instr and 0b0000_1101_1011_1111_1111_0000_0000_0000) == 0b0000_0001_0010_1000_1111_0000_0000_0000 or
+    (instr and 0b0000_1111_1011_1111_1111_1111_1111_0000) == 0b0000_0001_0010_1001_1111_0000_0000_0000:
+    # PSR Transfer (MRS, MSR)
+    op = ArmOp(
+      kind: omMRS,
+      instr: instr
+    )
+  else:
+    case instr.extract(26, 27)
+    of 0b00:
+      op = ArmOp(kind: instr.extract(21, 24).OpMnemonic)
+      assert op.kind in { omAND..omMVN }
+      op.alu = instr.decode[:OpAlu]()
+    of 0b10:
+      # Single Data Transfer (LDR, STR)
+      op = ArmOp(
+        kind: omLDR,
+        instr: instr
+      )
+    else:
+      assert false, "Unrecognized instruction"
+
+  op.condition = (instr shr 28).Condition
 
 proc decode[T](instr: ArmInstruction): T {.inline.} =
   instr.decode(result)
@@ -454,9 +465,55 @@ proc `$`(op: ArmOp): string =
       alu = op.alu
     &"{op.kind}{op.condition} R{alu.rd},R{alu.rn},<Op2>"
   else:
-    ""
+    &"{op.kind}"
 
 
+proc checkCondition(op: ArmOp, state: Arm7tdmiState): bool =
+  ## Check bits 31..28 of the ARM instruction. Throws an exception on _1111_.
+  ## 
+  ## See: Page 30 [36]
+  op.condition.check(state)
+
+
+
+
+
+#[ ######################################################################################
+
+    Branch Instructions
+
+]# ######################################################################################
+proc opArmBxDecode(cpu: var Arm7tdmiState, opcode: ArmInstruction): tuple[rn: int] =
+  result.rn = (opcode and 0b1111).int
+  assert result.rn != 15, "Using R15 as BX operand result in undefined behaviour"
+
+proc opArmBxExecute(cpu: var Arm7tdmiState, data: tuple[rn: int]) =
+  let
+    value = cpu.reg(data.rn)
+    asThumb = value.testBit(0)
+  if asThumb:
+    cpu.instructions = isThumb
+  else:
+    cpu.instructions = isArm
+  cpu.pc = value
+  cpu.pc.clearBit(0)
+  # TODO: 2S + 1N cycles
+
+proc opArmBx(cpu: var Arm7tdmiState, opcode: ArmInstruction) =
+  let
+    data = cpu.opArmBxDecode(opcode)
+  cpu.opArmBxExecute(data)
+  # TODO: 2S + 1N cycles
+
+
+proc opArmB(cpu: var Arm7tdmiState, instr: ArmInstruction) =
+  let
+    offset = cast[int32](instr.extract(0, 23).uint32.signExtend(24)) * 4
+    isLink = instr.testBit(24)
+  if isLink:
+    cpu.lr = cpu.pc - ArmInstructionSize
+  cpu.pc = (cpu.pc.int + offset.int).uint32 - ArmInstructionSize
+  # TODO: 2S + 1N cycles
 
 
 
@@ -628,7 +685,7 @@ func opTst(cpu: var Arm7tdmiState, op: OpAlu) =
     (op1, op2) = op.operands(cpu)
     r = op1 and op2
   if op.s:
-    cpu.logicFlags(op.rd, op1, op2)
+    cpu.logicFlags(op.rd, r, op2)
 
 func opTeq(cpu: var Arm7tdmiState, op: OpAlu) =
   ## OpCode: 0b1001
@@ -637,7 +694,7 @@ func opTeq(cpu: var Arm7tdmiState, op: OpAlu) =
     (op1, op2) = op.operands(cpu)
     r = op1 xor op2
   if op.s:
-    cpu.logicFlags(op.rd, op1, op2)
+    cpu.logicFlags(op.rd, r, op2)
 
 func opCmp(cpu: var Arm7tdmiState, op: OpAlu) =
   ## OpCode: 1010
@@ -749,7 +806,7 @@ const
 
 
 
-func opSingleDataTransfer(instr: ArmInstruction, cpu: var Arm7tdmiState, mem: Mcu) =
+func opSingleDataTransfer(cpu: var Arm7tdmiState, instr: ArmInstruction, mem: Mcu) =
   if not instr.checkCondition(cpu):
     return
 
@@ -806,26 +863,9 @@ func opSingleDataTransfer(instr: ArmInstruction, cpu: var Arm7tdmiState, mem: Mc
   STR     2N
   ]#
 
-type
-  Register {.size: sizeof(uint16).} = enum
-    r0 = 0
-    r1 = 1
-    r2 = 2
-    r3 = 3
-    r4 = 4
-    r5 = 5
-    r6 = 6
-    r7 = 7
-    r8 = 8
-    r9 = 9
-    r10 = 10
-    r11 = 11
-    r12 = 12
-    r13 = 13
-    r14 = 14
-    r15 = 15
 
-proc opBlockDataTransfer(instr: ArmInstruction, cpu: var Arm7tdmiState, mem: Mcu) =
+
+proc opBlockDataTransfer(cpu: var Arm7tdmiState, instr: ArmInstruction, mem: Mcu) =
   ## Block Data Transfer (LDM, STM)
   ##
   ## See: Page 56
@@ -866,7 +906,7 @@ proc opBlockDataTransfer(instr: ArmInstruction, cpu: var Arm7tdmiState, mem: Mcu
 
 
 
-func opHalfDataTransfer(instr: ArmInstruction, cpu: var Arm7tdmiState, mem: Mcu) =
+func opHalfDataTransfer(cpu: var Arm7tdmiState, instr: ArmInstruction, mem: Mcu) =
   ## Halfword and Signed Data Transfer (LDRH, STRH, LDRSB, LDRSH)
   ##
   ## See: Page 52 [58]
@@ -874,7 +914,7 @@ func opHalfDataTransfer(instr: ArmInstruction, cpu: var Arm7tdmiState, mem: Mcu)
 
 
 
-func opMsr(instr: ArmInstruction, cpu: var Arm7tdmiState, mem: Mcu) =
+func opMsr(cpu: var Arm7tdmiState, instr: ArmInstruction, mem: Mcu) =
   ## PSR Transfer (MRS, MSR)
   ## 
   ## See: Page 40 [46]
@@ -904,67 +944,50 @@ func opMsr(instr: ArmInstruction, cpu: var Arm7tdmiState, mem: Mcu) =
 
 
 
+
+
 proc step*(state: var Arm7tdmiState, mem: Mcu) =
   let
     instr = mem.read[:uint32](state.pc - 2*ArmInstructionSize)
 
   echo &"{state.pc.int - 8:#010x}\t{instr.int:#010x} {instr.int:#034b}"
-  # Branch
-  if (instr and 0b0000_0001_0010_1111_1111_1111_0001_0000) == 0b0000_0001_0010_1111_1111_1111_0001_0000:
-    if instr.checkCondition(state):
+  let
+    op = instr.decode[:ArmOp]()
+  state.pc += ArmInstructionSize
+  
+  if op.checkCondition(state):
+    case op.kind
+    of omBX:
       state.opArmBx(instr)
-    else:
-      state.pc += ArmInstructionSize
-  elif (instr and 0b0000_1010_0000_0000_0000_0000_0000_0000) == 0b0000_1010_0000_0000_0000_0000_0000_0000:
-    if instr.checkCondition(state):
+    of omB:
       state.opArmB(instr)
-    else:
-      state.pc += ArmInstructionSize
-  elif (instr and 0b0000_1110_0000_0000_0000_0000_0000_0000) == 0b0000_1000_0000_0000_0000_0000_0000_0000:
-    # Block Data Transfer (LDM, STM)
-    instr.opBlockDataTransfer(state, mem)
-    state.pc += ArmInstructionSize
-  elif (instr and 0b0000_1110_0000_0000_0000_0000_1001_0000) == 0b0000_0000_0000_0000_0000_0000_1001_0000:
-    # Halfword and Signed Data Transfer (LDRH, STRH, LDRSB, LDRSH)
-    instr.opHalfDataTransfer(state, mem)
-    state.pc += ArmInstructionSize
-  elif (instr and 0b0000_1101_1011_1111_1111_0000_0000_0000) == 0b0000_0001_0010_1000_1111_0000_0000_0000 or
-    (instr and 0b0000_1111_1011_1111_1111_1111_1111_0000) == 0b0000_0001_0010_1001_1111_0000_0000_0000:
-    instr.opMsr(state, mem)
-    state.pc += ArmInstructionSize
-  else:
-    case instr.extract(26, 27)
-    of 0b00:
-      let
-        decoded = instr.decode[:ArmOp]()
-      echo "\t\t", decoded
-      # ALU stuff
-      if instr.checkCondition(state):
-        case decoded.kind
-        of omAND: state.opAnd(decoded.alu)
-        of omEOR: state.opEor(decoded.alu)
-        of omSUB: state.opSub(decoded.alu)
-        of omRSB: state.opRsb(decoded.alu)
-        of omADD: state.opAdd(decoded.alu)
-        of omADC: state.opAdc(decoded.alu)
-        of omSBC: state.opSbc(decoded.alu)
-        of omRSC: state.opRsc(decoded.alu)
-        of omTST: state.opTst(decoded.alu)
-        of omTEQ: state.opTeq(decoded.alu)
-        of omCMP: state.opCmp(decoded.alu)
-        of omCMN: state.opCmn(decoded.alu)
-        of omORR: state.opOrr(decoded.alu)
-        of omMOV: state.opMov(decoded.alu)
-        of omBIC: state.opBic(decoded.alu)
-        of omMVN: state.opMvn(decoded.alu)
-        else:
-          assert false, &"Unrecognized instruction: {state.pc.int - 8}\t{instr.int:#010x} {instr.int:#034b}"
-    # Single Data Transfer (LDR, STR)
-    of 0b10:
-      instr.opSingleDataTransfer(state, nil)
+    of omLDM, omSTM:
+      state.opBlockDataTransfer(op.instr, mem)
+    of omLDRH, omSTRH, omLDRSB, omLDRSH:
+      state.opHalfDataTransfer(op.instr, mem)
+    of omMRS, omMSR:
+      state.opMsr(op.instr, mem)
+    of omAND: state.opAnd(op.alu)
+    of omEOR: state.opEor(op.alu)
+    of omSUB: state.opSub(op.alu)
+    of omRSB: state.opRsb(op.alu)
+    of omADD: state.opAdd(op.alu)
+    of omADC: state.opAdc(op.alu)
+    of omSBC: state.opSbc(op.alu)
+    of omRSC: state.opRsc(op.alu)
+    of omTST: state.opTst(op.alu)
+    of omTEQ: state.opTeq(op.alu)
+    of omCMP: state.opCmp(op.alu)
+    of omCMN: state.opCmn(op.alu)
+    of omORR: state.opOrr(op.alu)
+    of omMOV: state.opMov(op.alu)
+    of omBIC: state.opBic(op.alu)
+    of omMVN: state.opMvn(op.alu)
+    of omLDR, omSTR:
+      state.opSingleDataTransfer(op.instr, mem)
     else:
       assert false, &"Unrecognized instruction: {state.pc.int - 8}\t{instr.int:#010x} {instr.int:#034b}"
-    state.pc += ArmInstructionSize
+  echo "\t\t", op
   
   echo state
   
