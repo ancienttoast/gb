@@ -38,7 +38,7 @@ suite "ARM7TDMI - arm: branch instructions":
     cpu.step(mcu)
 
     check cpu.pc == (0x08000008 + 8)
-  
+
   test "B -8":
     var
       data = newSeq[uint8](33_554_432)

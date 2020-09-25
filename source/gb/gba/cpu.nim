@@ -9,8 +9,8 @@
 
 ]##
 import
-  std/[math, strformat, strutils],
-  gb/common/util, mem
+  std/strformat,
+  gb/common/util, mem, cpu_decode
 
 
 
@@ -37,9 +37,6 @@ type
   InstructionSet = enum
     isArm
     isThumb
-
-  ArmInstruction = uint32
-  ThumbInstruction = uint16
 
   Mode* = enum
     mUser       = 0b10000  ## The program execution state
@@ -202,24 +199,6 @@ proc `$`*(self: Arm7tdmiState): string =
   ARM Conditions
 
 ]#
-type
-  Condition = enum
-    cEQ = 0b0000    ## equal                      Z set
-    cNE = 0b0001    ## not equal                  Z clear
-    cCS = 0b0010    ## unsigned higher or same    C set
-    cCC = 0b0011    ## unsigned lower             C clear
-    cMI = 0b0100    ## negative                   N set
-    cPL = 0b0101    ## positive or zero           N clear
-    cVS = 0b0110    ## overflow                   V set
-    cVC = 0b0111    ## no overflow                V clear
-    cHI = 0b1000    ## unsigned higher            C set and Z clear
-    cLS = 0b1001    ## unsigned lower or same     C clear or Z set
-    cGE = 0b1010    ## greater or equal           N equals V
-    cLT = 0b1011    ## less than                  N not equal to V
-    cGT = 0b1100    ## greater than               Z clear AND (N equals V)
-    cLE = 0b1101    ## less than or equal         Z set OR (N not equal to V)
-    cAL = 0b1110    ## always                     (ignored)
-
 proc check(condition: Condition, state: Arm7tdmiState): bool =
   let
     status = state.cpsr
@@ -246,32 +225,11 @@ proc checkCondition(instr: uint32, state: Arm7tdmiState): bool =
   ## See: Page 30 [36]
   (instr shr 28).Condition.check(state)
 
-
-
-func extract[T: uint16 | uint32](value: T, a, b: static[int]): T =
-  const
-    bits = a..b
-    Mask = (2^bits.len - 1).T
-  (value shr bits.a) and Mask
-
-func rotateLeft*[T: uint16 | uint32](x: T, n: uint): T =
-  # Based on: https://blog.regehr.org/archives/1063
-  (x shl n) or (x shr (32 - n))
-
-func rotateRight*[T: uint16 | uint32](x: T, n: uint): T =
-  # Based on: https://blog.regehr.org/archives/1063
-  (x shr n) or (x shl (32 - n))
-
-func ashr*[T: int32](x: T, n: uint): T =
-  ## Only works for two's complement
-  ## TODO: I think n == 0 undefined
-  if x < 0:
-    not(not x shr n)
-  else:
-    x shr n
-
-func `ashr`*[T: uint32](x: T, n: uint): T =
-  cast[uint32](ashr(cast[int32](x), n))
+proc checkCondition(op: ArmOp, state: Arm7tdmiState): bool =
+  ## Check bits 31..28 of the ARM instruction. Throws an exception on _1111_.
+  ## 
+  ## See: Page 30 [36]
+  op.condition.check(state)
 
 
 
@@ -308,171 +266,6 @@ type
 
 func rm*(instr: ArmInstruction): int =
   instr.extract(0, 3).int
-
-
-
-
-
-#[ ######################################################################################
-
-    ALU instructions
-
-]# ######################################################################################
-type
-  OpMnemonic = enum
-    omAND, omEOR, omSUB, omRSB, omADD, omADC, omSBC, omRSC, omTST, omTEQ, omCMP, omCMN, omORR, omMOV, omBIC, omMVN
-    omB
-    omBL
-    omBX
-    omCDP
-    omLDC
-    omLDM, omSTM
-    omLDR, omSTR
-    omLDRH, omSTRH, omLDRSB, omLDRSH
-    omMCR
-    omMLA
-    omMRC
-    omMRS, omMSR
-    omMUL
-    omSTC
-    omSWI
-    omSWP
-  
-  Register = range[0..15]
-
-  OpAluOperand = object
-    case isImmediate: bool
-    of true:
-      rotate: uint
-      imm: uint32
-    of false:
-      shift: uint32
-      rm: int
-
-  OpAlu = object
-    s: bool
-    rn: Register
-    rd: Register
-    operand2: OpAluOperand
-  
-  ArmOp = object
-    condition: Condition
-    case kind: OpMnemonic
-    of omAND..omMVN:
-      alu: OpAlu
-    else:
-      # TODO: parse these as well
-      instr: ArmInstruction
-
-proc decode[T](instr: ArmInstruction): T {.inline.}
-
-proc decode(instr: ArmInstruction, op: var OpAluOperand) =
-  op =
-    if instr.i:
-      OpAluOperand(
-        isImmediate: true,
-        rotate: instr.extract(8, 11),
-        imm: instr.extract(0, 7)
-      )
-    else:
-      OpAluOperand(
-        isImmediate: false,
-        shift: instr.extract(4, 11),
-        rm: instr.extract(0, 3).int
-      )
-
-proc decode(instr: ArmInstruction, op: var OpAlu) =
-  op = OpAlu(
-    s: instr.testBit(20),
-    rn: instr.extract(16, 19).int,
-    rd: instr.extract(12, 15).int
-  )
-  instr.decode(op.operand2)
-
-proc decode(instr: ArmInstruction, op: var ArmOp) =
-  if (instr and 0b0000_0001_0010_1111_1111_1111_0001_0000) == 0b0000_0001_0010_1111_1111_1111_0001_0000:
-    op = ArmOp(
-      kind: omBX,
-      instr: instr
-    )
-  elif (instr and 0b0000_1010_0000_0000_0000_0000_0000_0000) == 0b0000_1010_0000_0000_0000_0000_0000_0000:
-    op = ArmOp(
-      kind: omB,
-      instr: instr
-    )
-  elif (instr and 0b0000_1110_0000_0000_0000_0000_0000_0000) == 0b0000_1000_0000_0000_0000_0000_0000_0000:
-    # Block Data Transfer (LDM, STM)
-    op = ArmOp(
-      kind: omLDM,
-      instr: instr
-    )
-  elif (instr and 0b0000_1110_0000_0000_0000_0000_1001_0000) == 0b0000_0000_0000_0000_0000_0000_1001_0000:
-    # Halfword and Signed Data Transfer (LDRH, STRH, LDRSB, LDRSH)
-    op = ArmOp(
-      kind: omLDRH,
-      instr: instr
-    )
-  elif (instr and 0b0000_1101_1011_1111_1111_0000_0000_0000) == 0b0000_0001_0010_1000_1111_0000_0000_0000 or
-    (instr and 0b0000_1111_1011_1111_1111_1111_1111_0000) == 0b0000_0001_0010_1001_1111_0000_0000_0000:
-    # PSR Transfer (MRS, MSR)
-    op = ArmOp(
-      kind: omMRS,
-      instr: instr
-    )
-  else:
-    case instr.extract(26, 27)
-    of 0b00:
-      op = ArmOp(kind: instr.extract(21, 24).OpMnemonic)
-      assert op.kind in { omAND..omMVN }
-      op.alu = instr.decode[:OpAlu]()
-    of 0b10:
-      # Single Data Transfer (LDR, STR)
-      op = ArmOp(
-        kind: omLDR,
-        instr: instr
-      )
-    else:
-      assert false, "Unrecognized instruction"
-
-  op.condition = (instr shr 28).Condition
-
-proc decode[T](instr: ArmInstruction): T {.inline.} =
-  instr.decode(result)
-
-
-proc `$`(mnemoic: OpMnemonic): string =
-  system.`$`(mnemoic).substr(2)
-
-proc `$`(cond: Condition): string =
-  if cond == cAL:
-    ""
-  else:
-    system.`$`(cond).substr(1)
-
-proc `$`(op: ArmOp): string =
-  case op.kind
-  of omMOV, omMVN:
-    let
-      alu = op.alu
-      s = if alu.s: "S" else: ""
-    &"{op.kind}{op.condition}{s} R{alu.rd},<Op2>"
-  of omCMP, omCMN, omTEQ, omTST:
-    let
-      alu = op.alu
-    &"{op.kind}{op.condition} R{alu.rd},<Op2>"
-  of omAND, omEOR, omSUB, omRSB, omADD, omADC, omSBC, omRSC, omORR, omBIC:
-    let
-      alu = op.alu
-    &"{op.kind}{op.condition} R{alu.rd},R{alu.rn},<Op2>"
-  else:
-    &"{op.kind}"
-
-
-proc checkCondition(op: ArmOp, state: Arm7tdmiState): bool =
-  ## Check bits 31..28 of the ARM instruction. Throws an exception on _1111_.
-  ## 
-  ## See: Page 30 [36]
-  op.condition.check(state)
 
 
 
@@ -550,14 +343,23 @@ func registerValue(op: OpAluOperand, cpu: Arm7tdmiState): uint32 =
     # only the bottom byte is used
     shiftValue = cpu.reg(op.rm) and 0x000000ff
   # TODO: carry flag
-  # TODO: handle shiftAmount == 0
   var
     carry = false
+  debugEcho shiftType
   result =
     case shiftType
-    of stLSL: shiftValue shl shiftAmount
-    of stLSR: shiftValue shr shiftAmount
-    of stASR: ashr(shiftValue, shiftAmount)
+    of stLSL:
+      if shiftAmount == 0:
+        carry = psC in cpu.cpsr
+        cpu.reg(op.rm)
+      else:
+        shiftValue shl shiftAmount
+    of stLSR:
+      # TODO: handle shiftAmount == 0
+      shiftValue shr shiftAmount
+    of stASR:
+      # TODO: handle shiftAmount == 0
+      ashr(shiftValue, shiftAmount)
     of stROR:
       if shiftAmount == 0:
         let

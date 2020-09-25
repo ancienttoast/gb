@@ -140,3 +140,32 @@ func signExtend*[T](x: T, bits: static[int]): T =
   const
     m = (1 shl (bits - 1)).T
   (x xor m) - m
+
+
+
+
+
+func extract*[T: uint16 | uint32](value: T, a, b: static[int]): T =
+  const
+    bits = a..b
+    Mask = (2^bits.len - 1).T
+  (value shr bits.a) and Mask
+
+func rotateLeft*[T: uint16 | uint32](x: T, n: uint): T =
+  # Based on: https://blog.regehr.org/archives/1063
+  (x shl n) or (x shr (32 - n))
+
+func rotateRight*[T: uint16 | uint32](x: T, n: uint): T =
+  # Based on: https://blog.regehr.org/archives/1063
+  (x shr n) or (x shl (32 - n))
+
+func ashr*[T: int32](x: T, n: uint): T =
+  ## Only works for two's complement
+  ## TODO: I think n == 0 undefined
+  if x < 0:
+    not(not x shr n)
+  else:
+    x shr n
+
+func `ashr`*[T: uint32](x: T, n: uint): T =
+  cast[uint32](ashr(cast[int32](x), n))
