@@ -176,11 +176,9 @@ template `lr=`(state: var Arm7tdmiState, value: uint32) = state.reg(14) = value
 
 template pc*(state: Arm7tdmiState): uint32 = state.reg(15)
 template `pc=`*(state: var Arm7tdmiState, value: uint32) =
-  #[ TODO:
-      - should this happen here?
-      - prefetch 2 opcodes?
-      - Thumb support
-  ]#
+  # TODO: actually prefetch 2 opcodes instead of this
+  # TODO: Thumb support
+  # TODO: this should happen even if r15 is directly assigned
   state.reg(15) = value + 2*ArmInstructionSize
 
 
@@ -304,7 +302,7 @@ proc opArmB(cpu: var Arm7tdmiState, instr: ArmInstruction) =
     offset = cast[int32](instr.extract(0, 23).uint32.signExtend(24)) * 4
     isLink = instr.testBit(24)
   if isLink:
-    cpu.lr = cpu.pc - ArmInstructionSize
+    cpu.lr = cpu.pc - 2*ArmInstructionSize
   cpu.pc = (cpu.pc.int + offset.int).uint32 - ArmInstructionSize
   # TODO: 2S + 1N cycles
 
@@ -540,6 +538,9 @@ func opMov(cpu: var Arm7tdmiState, op: OpAlu) =
   if op.s:
     cpu.logicFlags(op.rd, value, value)
   cpu.reg(op.rd) = value
+  # TODO: this should be handled in a central place somewhere
+  if op.rd == 15:
+    cpu.reg(op.rd) += ArmInstructionSize*2
 
 func opBic(cpu: var Arm7tdmiState, op: OpAlu) =
   ## OpCode: 0b1110
