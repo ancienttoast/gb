@@ -27,9 +27,7 @@ type
 
   OpMnemonic* = enum
     omAND, omEOR, omSUB, omRSB, omADD, omADC, omSBC, omRSC, omTST, omTEQ, omCMP, omCMN, omORR, omMOV, omBIC, omMVN
-    omB
-    omBL
-    omBX
+    omB, omBX
     omCDP
     omLDC
     omLDM, omSTM

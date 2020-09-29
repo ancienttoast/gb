@@ -259,10 +259,10 @@ func operandImmediate*(instr: ArmInstruction): uint32 =
 
 type
   ShiftType = enum
-    stLSL
-    stLSR
-    stASR
-    stROR
+    stLSL   ## Logical Shift Left
+    stLSR   ## Logical Shift Right
+    stASR   ## Airthmetic Shift Right
+    stROR   ## ROtate Right
 
 func rm*(instr: ArmInstruction): int =
   instr.extract(0, 3).int
@@ -342,7 +342,6 @@ func registerValue(op: OpAluOperand, cpu: Arm7tdmiState): uint32 =
   let
     # only the bottom byte is used
     shiftValue = cpu.reg(op.rm) and 0x000000ff
-  # TODO: carry flag
   var
     carry = false
   debugEcho shiftType
@@ -353,13 +352,18 @@ func registerValue(op: OpAluOperand, cpu: Arm7tdmiState): uint32 =
         carry = psC in cpu.cpsr
         cpu.reg(op.rm)
       else:
+        # TODO: carry flag
         shiftValue shl shiftAmount
     of stLSR:
-      # TODO: handle shiftAmount == 0
-      shiftValue shr shiftAmount
+      let
+        amount = if shiftAmount == 0: 32'u32 else: shiftAmount
+      carry = shiftValue.testBit(amount - 1)
+      shiftValue shr amount
     of stASR:
-      # TODO: handle shiftAmount == 0
-      ashr(shiftValue, shiftAmount)
+      let
+        amount = if shiftAmount == 0: 32'u32 else: shiftAmount
+      carry = shiftValue.testBit(amount - 1)
+      ashr(shiftValue, amount)
     of stROR:
       if shiftAmount == 0:
         let
@@ -367,6 +371,7 @@ func registerValue(op: OpAluOperand, cpu: Arm7tdmiState): uint32 =
         carry = (shiftValue and 1) == 1
         (shiftValue shr 1) and (oldCarry shl 31)
       else:
+        carry = shiftValue.testBit(shiftAmount - 1)
         rotateRight(shiftValue, shiftAmount)
 
 func value(op: OpAluOperand, cpu: Arm7tdmiState): uint32 =
@@ -380,6 +385,7 @@ func operands(op: OpAlu, cpu: Arm7tdmiState): tuple[op1, op2: uint32] =
     op1: cpu.reg(op.rn),
     op2: op.operand2.value(cpu)
   )
+
 
 
 func airthmeticFlags(cpu: var Arm7tdmiState, rd: range[0..15], r, op1, op2: uint32) =
