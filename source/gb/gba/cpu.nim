@@ -208,7 +208,7 @@ proc check(condition: Condition, state: Arm7tdmiState): bool =
   of cMI: psN in status
   of cPL: psN notin status
   of cVS: psV in status
-  of cVC: psN notin status
+  of cVC: psV notin status
   of cHI: psC in status and psZ notin status
   of cLS: psC notin status and psZ in status
   of cGE: (psN in status) == (psV in status)
@@ -316,15 +316,29 @@ proc opArmB(cpu: var Arm7tdmiState, instr: ArmInstruction) =
 func immediateValue(op: OpAluOperand, cpu: Arm7tdmiState): uint32 =
   op.imm.rotateRight(op.rotate * 2)
 
-func registerValue(op: OpAluOperand, cpu: Arm7tdmiState): uint32 =
-  ## When below Bit 4 R=0 - Shift by Immediate
-  ##   11-7   Is - Shift amount   (1-31, 0=Special/See below)
-  ## When below Bit 4 R=1 - Shift by Register
-  ##   11-8   Rs - Shift register (R0-R14) - only lower 8bit 0-255 used
-  ##   7      Reserved, must be zero  (otherwise multiply or LDREX or undefined)
-  ## 6-5    Shift Type (0=LSL, 1=LSR, 2=ASR, 3=ROR)
-  ## 4      R - Shift by Register Flag (0=Immediate, 1=Register)
-  ## 3-0    Rm - 2nd Operand Register (R0..R15) (including PC=R15)
+func registerValue(op: OpAluOperand, cpu: Arm7tdmiState, carry: var bool): uint32 =
+  ##
+  ## bit 0   - 0: immediate value, 1: register
+  ## bit 1-2 - Shift Type (0=LSL, 1=LSR, 2=ASR, 3=ROR)
+  ##
+  ## Shift by Immediate
+  ##
+  ##   7       3 2 1 0
+  ##  +-+-+-+-+-+-+-+-+
+  ##  | amount  |   |0|
+  ##  +-+-+-+-+-+-+-+-+
+  ##
+  ##   bit 3-7 - Shift amount (1-31, 0=Special)
+  ## 
+  ## Shift by Register
+  ##   7     4 3 2 1 0
+  ##  +-+-+-+-+-+-+-+-+
+  ##  |  rs   |0|   |1|
+  ##  +-+-+-+-+-+-+-+-+
+  ## 
+  ##   bit 3   - Reserved, must be zero  (otherwise multiply or LDREX or undefined)
+  ##   bit 4-7 - Rs - Shift register (R0-R14) - only lower 8bit 0-255 used
+  ##
   let
     isShiftRegister = op.shift.testBit(0)
     shiftType = op.shift.extract(1, 2).ShiftType
@@ -334,29 +348,33 @@ func registerValue(op: OpAluOperand, cpu: Arm7tdmiState): uint32 =
         let
           rs = op.shift.extract(4, 7)
         assert rs != 15, "ALU instructions: shift amount register (Rs) cannot be R15"
-        cpu.reg(rs)
+        cpu.reg(rs) and 0x000000ff
       else:
         op.shift.extract(3, 7)
-  let
-    # only the bottom byte is used
-    shiftValue = cpu.reg(op.rm) and 0x000000ff
-  var
-    carry = false
-  debugEcho shiftType
+    shiftValue = cpu.reg(op.rm)
+
+  if isShiftRegister and shiftAmount == 0:
+    return shiftValue
+
   result =
     case shiftType
     of stLSL:
       if shiftAmount == 0:
-        carry = psC in cpu.cpsr
         cpu.reg(op.rm)
       else:
-        # TODO: carry flag
-        shiftValue shl shiftAmount
+        carry = if shiftAmount > 32: false else: shiftValue.testBit(32 - shiftAmount)
+        if shiftAmount > 31:
+          0'u32
+        else:
+          shiftValue shl shiftAmount
     of stLSR:
       let
         amount = if shiftAmount == 0: 32'u32 else: shiftAmount
-      carry = shiftValue.testBit(amount - 1)
-      shiftValue shr amount
+      carry = if amount > 32: false else: shiftValue.testBit(amount - 1)
+      if amount > 31:
+        0'u32
+      else:
+        shiftValue shr amount
     of stASR:
       let
         amount = if shiftAmount == 0: 32'u32 else: shiftAmount
@@ -366,56 +384,77 @@ func registerValue(op: OpAluOperand, cpu: Arm7tdmiState): uint32 =
       if shiftAmount == 0:
         let
           oldCarry = (psC in cpu.cpsr).uint32
-        carry = (shiftValue and 1) == 1
-        (shiftValue shr 1) and (oldCarry shl 31)
+        carry = shiftValue.testBit(0)
+        (shiftValue shr 1) or (oldCarry shl 31)
       else:
-        carry = shiftValue.testBit(shiftAmount - 1)
-        rotateRight(shiftValue, shiftAmount)
+        let
+          r = rotateRight(shiftValue, shiftAmount)
+        carry = r.testBit(31)
+        r
+  
 
-func value(op: OpAluOperand, cpu: Arm7tdmiState): uint32 =
+func value(op: OpAluOperand, cpu: Arm7tdmiState, shiftCarry: var bool): uint32 =
   if op.isImmediate:
     op.immediateValue(cpu)
   else:
-    op.registerValue(cpu)
+    op.registerValue(cpu, shiftCarry)
 
-func operands(op: OpAlu, cpu: Arm7tdmiState): tuple[op1, op2: uint32] =
+func operands(op: OpAlu, cpu: Arm7tdmiState, shiftCarry: var bool): tuple[op1, op2: uint32] =
   (
     op1: cpu.reg(op.rn),
-    op2: op.operand2.value(cpu)
+    op2: op.operand2.value(cpu, shiftCarry)
   )
 
+func operands(op: OpAlu, cpu: Arm7tdmiState): tuple[op1, op2: uint32] =
+  var
+    carry: bool
+  op.operands(cpu, carry)
+
+
+
+# TODO: create a macro to call these automatically
+
+proc builtin_add_overflow(a, b: uint32, res: var uint32): bool
+  {.importc: "__builtin_add_overflow", nodecl, noSideEffect.}
+
+proc builtin_sub_overflow(a, b: uint32, res: var uint32): bool
+  {.importc: "__builtin_sub_overflow", nodecl, noSideEffect.}
 
 
 func airthmeticFlags(cpu: var Arm7tdmiState, rd: range[0..15], r, op1, op2: uint32) =
   cpu.cpsr ?= (op1.testBit(31) != r.testBit(31), { psV })
   cpu.cpsr ?= (r == 0, { psZ })
-  cpu.cpsr ?= (op1 <= op2, { psC })
+  #cpu.cpsr ?= (op1 <= op2, { psC })
   cpu.cpsr ?= (r.testBit(31), { psN })
 
-func logicFlags(cpu: var Arm7tdmiState, rd: range[0..15], r, op2: uint32) =
+func logicFlags(cpu: var Arm7tdmiState, rd: range[0..15], r: uint32, carry: bool) =
   cpu.cpsr ?= (r == 0, { psZ })
-  # TODO: C flag
+  cpu.cpsr ?= (carry, { psC })
   cpu.cpsr ?= (r.testBit(31), { psN })
 
 
 func opAnd(cpu: var Arm7tdmiState, op: OpAlu) =
   ## OpCode: 0b0000
   ## Rd := Operand1 AND Operand2
+  var
+    shiftCarry = psC in cpu.cpsr
   let
-    (op1, op2) = op.operands(cpu)
+    (op1, op2) = op.operands(cpu, shiftCarry)
     r = op1 and op2
   if op.s:
-    cpu.logicFlags(op.rd, op1, op2)
+    cpu.logicFlags(op.rd, op1, shiftCarry)
   cpu.reg(op.rd) = r
 
 func opEor(cpu: var Arm7tdmiState, op: OpAlu) =
   ## OpCode: 0b0001
   ## Rd := Operand1 EOR Operand2
+  var
+    shiftCarry = psC in cpu.cpsr
   let
-    (op1, op2) = op.operands(cpu)
+    (op1, op2) = op.operands(cpu, shiftCarry)
     r = op1 xor op2
   if op.s:
-    cpu.logicFlags(op.rd, op1, op2)
+    cpu.logicFlags(op.rd, op1, shiftCarry)
   cpu.reg(op.rd) = r
 
 func opSub(cpu: var Arm7tdmiState, op: OpAlu) =
@@ -425,7 +464,16 @@ func opSub(cpu: var Arm7tdmiState, op: OpAlu) =
     (op1, op2) = op.operands(cpu)
     r = op1 - op2
   if op.s:
+    let
+      (r, c) =
+        block:
+        var
+          r = op1
+          c = false
+        c = c or builtin_sub_overflow(r, op2, r)
+        (r, c)
     cpu.airthmeticFlags(op.rd, r, op1, op2)
+    cpu.cpsr ?= (not c, { psC })
   cpu.reg(op.rd) = r
 
 func opRsb(cpu: var Arm7tdmiState, op: OpAlu) =
@@ -445,31 +493,55 @@ func opAdd(cpu: var Arm7tdmiState, op: OpAlu) =
     (op1, op2) = op.operands(cpu)
     r = op1 + op2
   if op.s:
+    let
+      (r, c) =
+        block:
+        var
+          r = op1
+          c = false
+        c = c or builtin_add_overflow(r, op2, r)
+        (r, c)
     cpu.airthmeticFlags(op.rd, r, op1, op2)
+    cpu.cpsr ?= (c, { psC })
   cpu.reg(op.rd) = r
 
 func opAdc(cpu: var Arm7tdmiState, op: OpAlu) =
   ## OpCode: 0101
   ## Rd := Operand1 + Operand2 + carry
-  # TODO: include the carry in the overflow calculation
   let
     (op1, op2) = op.operands(cpu)
     carry = (if psC in cpu.cpsr: 1'u32 else: 0'u32)
     r = op1 + op2 + carry
   if op.s:
+    var
+      r = op1
+      c = false
+    c = c or builtin_add_overflow(r, op2, r)
+    c = c or builtin_add_overflow(r, carry, r)
     cpu.airthmeticFlags(op.rd, r, op1, op2)
+    cpu.cpsr ?= (c, { psC })
   cpu.reg(op.rd) = r
 
 func opSbc(cpu: var Arm7tdmiState, op: OpAlu) =
   ## OpCode: 0110
   ## Rd := Operand1 - Operand2 + carry - 1
-  # TODO: include the carry in the overflow calculation
   let
     (op1, op2) = op.operands(cpu)
     carry = (if psC in cpu.cpsr: 1'u32 else: 0'u32)
     r = op1 - op2 + carry - 1
   if op.s:
+    let
+      (r, c) =
+        block:
+        var
+          r = op1
+          c = false
+        c = c or builtin_sub_overflow(r, op2, r)
+        c = c or builtin_add_overflow(r, carry, r)
+        c = c or builtin_sub_overflow(r, 1, r)
+        (r, c)
     cpu.airthmeticFlags(op.rd, r, op1, op2)
+    cpu.cpsr ?= (not c, { psC })
   cpu.reg(op.rd) = r
 
 func opRsc(cpu: var Arm7tdmiState, op: OpAlu) =
@@ -487,20 +559,24 @@ func opRsc(cpu: var Arm7tdmiState, op: OpAlu) =
 func opTst(cpu: var Arm7tdmiState, op: OpAlu) =
   ## OpCode: 0b1000
   ## same as AND, but result isn't written
+  var
+    shiftCarry = psC in cpu.cpsr
   let
-    (op1, op2) = op.operands(cpu)
+    (op1, op2) = op.operands(cpu, shiftCarry)
     r = op1 and op2
   if op.s:
-    cpu.logicFlags(op.rd, r, op2)
+    cpu.logicFlags(op.rd, r, shiftCarry)
 
 func opTeq(cpu: var Arm7tdmiState, op: OpAlu) =
   ## OpCode: 0b1001
   ## same as EOR, but result isn't written
+  var
+    shiftCarry = psC in cpu.cpsr
   let
-    (op1, op2) = op.operands(cpu)
+    (op1, op2) = op.operands(cpu, shiftCarry)
     r = op1 xor op2
   if op.s:
-    cpu.logicFlags(op.rd, r, op2)
+    cpu.logicFlags(op.rd, r, shiftCarry)
 
 func opCmp(cpu: var Arm7tdmiState, op: OpAlu) =
   ## OpCode: 1010
@@ -522,21 +598,25 @@ func opCmn(cpu: var Arm7tdmiState, op: OpAlu) =
 
 func opOrr(cpu: var Arm7tdmiState, op: OpAlu) =
   ## OpCode: 1100
-  ## Rd := Operand1 OR Operand2 
+  ## Rd := Operand1 OR Operand2
+  var
+    shiftCarry = psC in cpu.cpsr
   let
-    (op1, op2) = op.operands(cpu)
+    (op1, op2) = op.operands(cpu, shiftCarry)
     r = op1 or op2
   if op.s:
-    cpu.logicFlags(op.rd, r, op2)
+    cpu.logicFlags(op.rd, r, shiftCarry)
   cpu.reg(op.rd) = r
 
 func opMov(cpu: var Arm7tdmiState, op: OpAlu) =
   ## OpCode: 0b1101
   ## Rd := Operand2
+  var
+    shiftCarry = psC in cpu.cpsr
   let
-    value = op.operand2.value(cpu)
+    value = op.operand2.value(cpu, shiftCarry)
   if op.s:
-    cpu.logicFlags(op.rd, value, value)
+    cpu.logicFlags(op.rd, value, shiftCarry)
   cpu.reg(op.rd) = value
   # TODO: this should be handled in a central place somewhere
   if op.rd == 15:
@@ -545,21 +625,25 @@ func opMov(cpu: var Arm7tdmiState, op: OpAlu) =
 func opBic(cpu: var Arm7tdmiState, op: OpAlu) =
   ## OpCode: 0b1110
   ## Rd := Operand1 AND NOT Operand2
+  var
+    shiftCarry = psC in cpu.cpsr
   let
-    (op1, op2) = op.operands(cpu)
+    (op1, op2) = op.operands(cpu, shiftCarry)
     r = op1 and (not op2)
   if op.s:
-    cpu.logicFlags(op.rd, r, op2)
+    cpu.logicFlags(op.rd, r, shiftCarry)
   cpu.reg(op.rd) = r
 
 func opMvn(cpu: var Arm7tdmiState, op: OpAlu) =
   ## OpCode: 1111
   ## Rd := not Operand2
+  var
+    shiftCarry = psC in cpu.cpsr
   let
-    (_, op2) = op.operands(cpu)
+    (_, op2) = op.operands(cpu, shiftCarry)
     r = not op2
   if op.s:
-    cpu.logicFlags(op.rd, r, op2)
+    cpu.logicFlags(op.rd, r, shiftCarry)
   cpu.reg(op.rd) = r
 
 
@@ -763,7 +847,7 @@ proc step*(state: var Arm7tdmiState, mem: Mcu) =
   let
     op = instr.decode[:ArmOp]()
   state.pc += ArmInstructionSize
-  
+
   if op.checkCondition(state):
     case op.kind
     of omBX:
@@ -797,6 +881,5 @@ proc step*(state: var Arm7tdmiState, mem: Mcu) =
     else:
       assert false, &"Unrecognized instruction: {state.pc.int - 8}\t{instr.int:#010x} {instr.int:#034b}"
   echo "\t\t", op
-  
   echo state
   

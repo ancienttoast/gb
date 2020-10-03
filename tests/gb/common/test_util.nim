@@ -15,3 +15,6 @@ suite "util":
   
   test "getBit - bit 6 = 1":
     check 1 == getBit(0b01000000, 6)
+  
+  test "rotateRight - 1":
+    check 0x80000000'u32 == rotateRight(1'u32, 1)
