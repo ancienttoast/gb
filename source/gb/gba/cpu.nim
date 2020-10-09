@@ -313,8 +313,9 @@ proc opArmB(cpu: var Arm7tdmiState, instr: ArmInstruction) =
     ALU instructions
 
 ]# ######################################################################################
-func immediateValue(op: OpAluOperand, cpu: Arm7tdmiState): uint32 =
-  op.imm.rotateRight(op.rotate * 2)
+func immediateValue(op: OpAluOperand, cpu: Arm7tdmiState, carry: var bool): uint32 =
+  result = op.imm.rotateRight(op.rotate * 2)
+  carry = result.testBit(31)
 
 func registerValue(op: OpAluOperand, cpu: Arm7tdmiState, carry: var bool): uint32 =
   ##
@@ -395,7 +396,7 @@ func registerValue(op: OpAluOperand, cpu: Arm7tdmiState, carry: var bool): uint3
 
 func value(op: OpAluOperand, cpu: Arm7tdmiState, shiftCarry: var bool): uint32 =
   if op.isImmediate:
-    op.immediateValue(cpu)
+    op.immediateValue(cpu, shiftCarry)
   else:
     op.registerValue(cpu, shiftCarry)
 
@@ -475,6 +476,9 @@ func opSub(cpu: var Arm7tdmiState, op: OpAlu) =
     cpu.airthmeticFlags(op.rd, r, op1, op2)
     cpu.cpsr ?= (not c, { psC })
   cpu.reg(op.rd) = r
+  
+  if op.rd == 15:
+    cpu.reg(op.rd) += ArmInstructionSize*2
 
 func opRsb(cpu: var Arm7tdmiState, op: OpAlu) =
   ## OpCode: 0011
