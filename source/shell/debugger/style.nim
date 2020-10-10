@@ -5,7 +5,7 @@ import
 
 proc styleVGui*() =
   # https://github.com/ocornut/imgui/issues/707#issuecomment-576867100
-  const ImVec4 = proc(x: float32, y: float32, z: float32, w: float32): ImVec4 = ImVec4(x: w, y: x, z: y, w: z)
+  const ImVec4 = proc(x: float32, y: float32, z: float32, w: float32): ImVec4 = ImVec4(x: x, y: y, z: z, w: w)
 
   let
     style = igGetStyle()
