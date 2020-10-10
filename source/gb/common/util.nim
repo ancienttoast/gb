@@ -1,3 +1,6 @@
+##
+## `https://stackoverflow.com/a/776523`_
+##
 import
   std/[bitops, math]
 
