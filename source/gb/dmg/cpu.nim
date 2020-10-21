@@ -389,7 +389,7 @@ op opLDHLd8, 3:
   execute: mem[cpu[rHL]] = b
   print: &"LD (HL),{b:#x}"
 
-op opLDAr8, 2:
+op opLDAr8, 1:
   decode:
     let
       yyy = ((opcode and 0b00000111) + 2).Register8
@@ -823,7 +823,7 @@ op opADCA, 1:
   execute: opAdc(cpu, cpu[rA])
   print: "ADC A,A"
 
-op opADCd8, 1:
+op opADCd8, 2:
   decode:
     let
       n = mem.readNext(pc)
@@ -854,7 +854,7 @@ op opSBCA, 1:
   execute: opSbc(cpu, cpu[rA])
   print: "SDC A,A"
 
-op opSBCd8, 1:
+op opSBCd8, 2:
   decode:
     let
       n = mem.readNext(pc)
@@ -925,7 +925,7 @@ op opADDHLSP, 2:
   execute: opAddHl(cpu, cpu.sp)
   print: "ADD HL,SP"
 
-op opADDSPs8, 2:
+op opADDSPs8, 4:
   decode:
     let
       s8 = mem.readNext(pc)
@@ -1036,7 +1036,8 @@ op opBITr8, 2:
   execute: opBit(cpu, bit, cpu[r8])
   print: &"BIT {bit},{r8}"
 
-op opBITpHL, 4:
+# TODO: Every source I could find mentions 4 cycles, but blargg test roms look for 3
+op opBITpHL, 3:
   decode:
     let
       bit = opcode.bit
@@ -1062,7 +1063,7 @@ op opSETbr8, 2:
   execute: cpu[r8] = opSet(bit, cpu[r8])
   print: &"SET {bit},{r8}"
 
-op opSETbpHL, 2:
+op opSETbpHL, 4:
   decode:
     let
       bit = opcode.bit
@@ -1088,7 +1089,7 @@ op opRESbr8, 2:
   execute: cpu[r8] = opRes(bit, cpu[r8])
   print: &"RES {bit},{r8}"
 
-op opRESbpHL, 2:
+op opRESbpHL, 4:
   decode:
     let
       bit = opcode.bit

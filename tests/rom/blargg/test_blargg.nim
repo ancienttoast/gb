@@ -55,4 +55,5 @@ suite "Blargg test roms":
   testCpu "individual/09-op r,r.gb", 0xce67
   testCpu "individual/10-bit ops.gb", 0xcf58
   testCpu "individual/11-op a,(hl).gb", 0xcc62
-  testCpu "cpu_instrs.gb", 0x06f1
+  testFull "cpu_instrs", "blargg/cpu_instrs/cpu_instrs.gb", "result_cpu_instrs.png", 0x06f1
+  testFull "instr_timing", "blargg/instr_timing/instr_timing.gb", "result_instr_timing.png", 0xc8b0
