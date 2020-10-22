@@ -3,6 +3,8 @@ import
   opengl, nimgl/imgui, sdl2, impl_sdl, impl_opengl,
   imageman,
   style, gb/dmg/[dmg, cpu, mem, timer, ppu, joypad], shell/render
+import
+  mem_editor
 
 when defined(profiler):
   import nimprof
@@ -234,6 +236,7 @@ proc main*() =
     showCpu = true
     showDemo = false
     ppuWindow = initPpuWindow()
+    editor = newMemoryEditor()
     mainTexture = initTexture()
     gbRunning = true
     states: array[10, Option[DmgState]]
@@ -305,6 +308,7 @@ proc main*() =
         igCheckbox("Controls", addr showControls) 
         igCheckbox("Ppu", addr showPpu)
         igCheckbox("Cpu window", addr showCpu)
+        igCheckbox("Memory editor", addr editor.open)
         igSeparator()
         igCheckbox("Demo", addr showDemo)
         igEndMenu()
@@ -328,6 +332,11 @@ proc main*() =
 
     if showPpu:
       ppuWindow.draw(gameboy.ppu)
+
+    let
+      provider = proc(address: int): uint8 = gameboy.mcu[address.uint16]
+      setter = proc(address: int, value: uint8) = gameboy.mcu[address.uint16] = value
+    editor.draw("Memory editor", provider, setter, 0xffff)
     
     igSetNextWindowPos(ImVec2(x: 402, y: 24), FirstUseEver)
     igSetNextWindowSize(ImVec2(x: 338, y: 326), FirstUseEver)
