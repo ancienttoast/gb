@@ -11,12 +11,13 @@
 
 ]##
 import
-  math
+  std/math,
+  mem
 
 
 
 type
-  ApuState = tuple
+  ApuState* = tuple
     # Channel 1
     ch1Sweep:      uint8  ## 0xff10  NR10 - Channel 1 Sweep register (R/W)
     ch1Len:        uint8  ## 0xff11  NR11 - Channel 1 Sound length/Wave pattern duty (R/W)
@@ -45,11 +46,14 @@ type
     ch4Len:        uint8  ## 0xff20  NR41 - Channel 4 Sound Length (R/W)
                           ##   Sound Length = (64-t1)*(1/256) seconds The Length value is used only if Bit 6 in NR44 is set.
                           ##     bit 5-0 - Sound length data (t1: 0-63)
-    ch4Envelope:   uint8  ## 0xff31  NR42 - Channel 4 Volume Envelope (R/W)
+    ch4Envelope:   uint8  ## 0xff21  NR42 - Channel 4 Volume Envelope (R/W)
                           ##   bit 7-4 - Initial Volume of envelope (0-0Fh) (0=No Sound)
                           ##   bit 3   - Envelope Direction (0=Decrease, 1=Increase)
                           ##   bit 2-0 - Number of envelope sweep (n: 0-7)
                           ##     Length of 1 step = n*(1/64) seconds. If zero, stop envelope operation.
+
+    unused2:       uint8  ## 0xff22
+    unused3:       uint8  ## 0xff23
 
     # Control registers
     channelCtrl:    uint8 ## 0xff24  NR50 - Channel control / ON-OFF / Volume (R/W)
@@ -73,10 +77,29 @@ type
                           ##   bit 1 - Sound 2 ON flag (R)
                           ##   bit 0 - Sound 1 ON flag (R)
 
-    unused2:        array[9, uint8]
+    unused4:        array[9, uint8]
                           ## 0xff27-0xff2f
     wav:            array[16, uint8]
                           ## 0xff30-0xff3f  Wave Pattern RAM
+  
+  Apu* = ref object
+    mcu: Mcu
+    state*: ApuState
+
+
+proc step*(self: Apu, cycles: int) =
+  discard
+
+
+proc setupMemHandler*(mcu: Mcu, self: Apu) =
+  mcu.setHandler(msApu, addr self.state)
+  self.mcu = mcu
+
+proc newApu*(mcu: Mcu): Apu =
+  result = Apu()
+  mcu.setupMemHandler(result)
+
+
 
 proc square*(x: float, period = 128.0, amplitude = 100.0): float =
   # Force positive argument.

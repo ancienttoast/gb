@@ -1,5 +1,5 @@
 import
-  mem, cpu, timer, ppu, cartridge, joypad
+  mem, cpu, apu, timer, ppu, cartridge, joypad
 
 
 
@@ -76,6 +76,7 @@ type
     cpu: CpuState
     timer: TimerState
     ppu: PpuState
+    apu: ApuState
     joypad: JoypadState
     cart: MbcState
 
@@ -85,6 +86,7 @@ type
     cpu*: Cpu
     timer*: Timer
     ppu*: Ppu
+    apu*: Apu
     joypad*: Joypad
     cart*: Cartridge
 
@@ -101,6 +103,7 @@ proc reset*(self: Dmg, rom = "") =
   self.mcu.setupMemHandler(self.cpu)
   self.mcu.setupMemHandler(self.timer)
   self.mcu.setupMemHandler(self.ppu)
+  self.mcu.setupMemHandler(self.apu)
   self.mcu.setupMemHandler(self.joypad)
   
   if rom != "":
@@ -118,6 +121,7 @@ proc step*(self: Dmg): bool =
     cycles = self.cpu.step(self.mcu)
   self.cart.step(cycles)
   self.timer.step(cycles)
+  self.apu.step(cycles)
   result = self.ppu.step(cycles)
   self.cycles += cycles.uint64
 
@@ -127,6 +131,7 @@ proc save*(self: Dmg): DmgState =
   result.cpu = self.cpu.state
   result.timer = self.timer.state
   result.ppu = self.ppu.state
+  result.apu = self.apu.state
   result.joypad = self.joypad.state
   result.cart = self.cart.state
 
@@ -135,6 +140,7 @@ proc load*(self: Dmg, state: DmgState) =
   self.cpu.state = state.cpu
   self.timer.state = state.timer
   self.ppu.state = state.ppu
+  self.apu.state = state.apu
   self.joypad.state = state.joypad
   self.cart.state = state.cart
 
@@ -147,6 +153,7 @@ proc newDmg*(bootRom = ""): Dmg =
     cpu: newCpu(mcu),
     timer: newTimer(mcu),
     ppu: newPpu(mcu),
+    apu: newApu(mcu),
     joypad: newJoypad(mcu),
     cycles: 0
   )

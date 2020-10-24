@@ -59,6 +59,7 @@ type
     msJoypad
     msTimer
     msInterruptFlag
+    msApu
     msLcdIo
     msBootRomFlag
     msHighRam
@@ -78,6 +79,7 @@ const
     0xff00'u16..0xff00'u16,
     0xff04'u16..0xff07'u16,
     0xff0f'u16..0xff0f'u16,
+    0xff10'u16..0xff3f'u16,
     0xff40'u16..0xff4f'u16,
     0xff50'u16..0xff50'u16,
     0xff80'u16..0xfffe'u16,
@@ -117,6 +119,7 @@ func findHandler(self: Mcu, address: MemAddress): MemHandler =
     of 0xff00..0xff00: self.handlers[msJoypad]
     of 0xff04..0xff07: self.handlers[msTimer]
     of 0xff0f..0xff0f: self.handlers[msInterruptFlag]
+    of 0xff10..0xff3f: self.handlers[msApu]
     of 0xff40..0xff4f: self.handlers[msLcdIo]
     of 0xff50..0xff50: self.handlers[msBootRomFlag]
     of 0xff80..0xfffe: self.handlers[msHighRam]
