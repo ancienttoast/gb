@@ -12,7 +12,7 @@
 # TODO: better resizing policy (ImGui doesn't have flexible window resizing constraints yet)
 # From: https://gist.github.com/cmaughan/ce1bfcee3f9947939253
 import
-  std/strutils, std/strscans,
+  std/[strutils, strscans, strformat],
   nimgl/imgui
 
 type
@@ -79,7 +79,6 @@ proc draw*(self: MemoryEditor, title: string, data_provider: DataProviderProc, d
     
     var
       data_next = false
-    
     if not self.allowEdits or self.dataEditingAddr >= mem_size:
       self.dataEditingAddr = -1
     
@@ -128,24 +127,25 @@ proc draw*(self: MemoryEditor, title: string, data_provider: DataProviderProc, d
             data_write = false
           if self.dataEditingTakeFocus:
             igSetKeyboardFocusHere()
-            # TODO
-            #sprintf(AddrInput, "%0*X", addr_digits_count, base_display_addr+address);
-            #sprintf(DataInput, "%02X", mem_data[address]);
+            self.addrInput = newStringOfCap(32)
+            self.addrInput.formatValue(base_display_addr+address, "0" & $addr_digits_count & "X")
+            self.dataInput = newStringOfCap(32)
+            self.dataInput.formatValue(data_provider(address), "02X")
           var
             text_size: ImVec2
           igCalcTextSizeNonUDT(addr text_size, "FF")
           igPushItemWidth(text_size.x)
           let
-            flags = (ImGuiInputTextFlags.CharsHexadecimal.int32 or
+            flags = cast[ImGuiInputTextFlags](ImGuiInputTextFlags.CharsHexadecimal.int32 or
               ImGuiInputTextFlags.EnterReturnsTrue.int32 or
               ImGuiInputTextFlags.AutoSelectAll.int32 or
               ImGuiInputTextFlags.NoHorizontalScroll.int32 or
               ImGuiInputTextFlags.AlwaysInsertMode.int32 or
-              ImGuiInputTextFlags.CallbackAlways.int32).ImGuiInputTextFlags
+              ImGuiInputTextFlags.CallbackAlways.int32)
           if igInputText("##data", self.dataInput, 32, flags, get_cursor_pos, addr cursor_pos):
             data_write = true
             data_next = true
-          elif not self.dataEditingTakeFocus and igIsItemActive():
+          elif not self.dataEditingTakeFocus and not igIsItemActive():
             self.dataEditingAddr = -1
           self.dataEditingTakeFocus = false
           igPopItemWidth()
@@ -153,12 +153,10 @@ proc draw*(self: MemoryEditor, title: string, data_provider: DataProviderProc, d
             data_write = true
             data_next = true
           if data_write:
-            try:
-              let
-                data = parseHexInt(self.dataInput)
+            var
+              data: int
+            if scanf(self.dataInput, "$h", data):
               data_setter(address, data.uint8)
-            except ValueError:
-              discard
           igPopID()
         else:
           igText("%02X ", data_provider(address))
