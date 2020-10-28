@@ -168,7 +168,7 @@ proc setHandler*(self: Mcu, slot: MemSlot, values: ptr seq[uint8]) =
       write: proc(address: MemAddress, value: uint8) = values[(address - MemSlotSize[slot].a).int] = value,
     )
   )
-  
+
 proc setHandler*[T: tuple | object | array | uint8](self: Mcu, slot: MemSlot, obj: ptr T) =
   self.setHandler(slot, createHandlerFor(slot, obj))
 

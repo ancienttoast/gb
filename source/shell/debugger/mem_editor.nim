@@ -12,7 +12,7 @@
 # TODO: better resizing policy (ImGui doesn't have flexible window resizing constraints yet)
 # From: https://gist.github.com/cmaughan/ce1bfcee3f9947939253
 import
-  std/[strutils, strscans, strformat],
+  std/[strscans, strformat],
   nimgl/imgui
 
 type
