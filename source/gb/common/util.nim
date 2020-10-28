@@ -1,5 +1,5 @@
 import
-  std/bitops
+  std/[bitops, math]
 
 
 
@@ -113,3 +113,10 @@ iterator count*[T](slice: Slice[T]): int =
     for i in slice: yield i
   else:
     for i in countdown(slice.a, slice.b): yield i
+
+
+func extract*[T: uint8 | uint16 | uint32](value: T, a, b: static[int]): T =
+  const
+    bits = a..b
+    Mask = (2^bits.len - 1).T
+  (value shr bits.a) and Mask
