@@ -92,7 +92,7 @@ proc bigEndian*[T: uint16 | uint32 | uint64](value: T): T =
 
 
 
-export testBit
+export testBit, setBit
 
 func setBit*[T: uint8 | uint16 | int](value: var T, bit: static[int]) =
   const

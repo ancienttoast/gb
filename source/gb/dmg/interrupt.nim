@@ -1,5 +1,6 @@
 import
-  mem, bitops
+  gb/common/util,
+  mem
 
 
 
@@ -18,5 +19,5 @@ const
 proc raiseInterrupt*(mcu: Mcu, interrupt: Interrupt) =
   var
     table = mcu[IfAddress]
-  setBit(table, interrupt.ord)
+  table.setBit(interrupt.ord)
   mcu[IfAddress] = table
