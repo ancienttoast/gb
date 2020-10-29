@@ -111,7 +111,7 @@ proc flags*(self: Sm83State): set[Flag] =
   cast[set[Flag]](self[rF])
 
 proc flags*(self: var Sm83State): var set[Flag] =
-  cast[var set[Flag]](addr self[rF])
+  (cast[ptr set[Flag]](addr self[rF]))[]
 
 proc `flags=`*(self: var Sm83State, flags: set[Flag]) =
   self[rF] = cast[uint8](flags)
