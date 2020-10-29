@@ -374,8 +374,8 @@ proc main*() =
         isRunning = false
         let
           cycles = gameboy.cpu.step(gameboy.mcu)
+        gameboy.timer.step(cycles)
         for i in 0..<cycles:
-          gameboy.timer.step()
           discard gameboy.ppu.step()
       
       igSeparator()

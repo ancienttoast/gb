@@ -129,8 +129,8 @@ proc step*(self: Gameboy): bool =
   let
     cycles = self.cpu.step(self.mcu)
   self.cart.step(cycles)
+  self.timer.step(cycles)
   for i in 0..<cycles:
-    self.timer.step()
     result = result or self.ppu.step()
   self.cycles += cycles.uint64
 

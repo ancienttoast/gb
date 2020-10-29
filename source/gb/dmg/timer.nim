@@ -52,20 +52,21 @@ proc isEnabled(self: Timer): bool =
 proc speed(self: Timer): int =
   TimerFrequencies[self.state.tac and 0b00000011]
 
-proc step*(self: Timer) =
-  self.state.counter += 1
+proc step*(self: Timer, cycles: int) =
+  for i in 0..<cycles:
+    self.state.counter += 1
 
-  if self.state.counter mod DividerFrequency == 0:
-    self.state.divider += 1
-  
-  if self.isEnabled and self.state.counter.int mod self.speed == 0:
-    self.state.tima += 1
-    if self.state.tima == 0:
-      self.state.tima = self.state.tma
-      self.mcu.raiseInterrupt(iTimer)
-  
-  if self.state.counter == TimerCycleCounter.high:
-    self.state.counter = TimerCycleCounter.low
+    if self.state.counter mod DividerFrequency == 0:
+      self.state.divider += 1
+    
+    if self.isEnabled and self.state.counter.int mod self.speed == 0:
+      self.state.tima += 1
+      if self.state.tima == 0:
+        self.state.tima = self.state.tma
+        self.mcu.raiseInterrupt(iTimer)
+    
+    if self.state.counter == TimerCycleCounter.high:
+      self.state.counter = TimerCycleCounter.low
 
 proc setupMemHandler*(mcu: Mcu, self: Timer) =
   mcu.setHandler(msTimer,
