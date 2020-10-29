@@ -1,18 +1,24 @@
 ##[
 
-  Timer and Divider Registers
-  ===========================
+Timer and Divider Registers
+===========================
 
-  Memory map
-  ----------
+Memory map
+----------
 
-  ======= ==== ======================
-  Address Name Description
-  ------- ---- ----------------------
-  0xff04  DIV  Divider Register (R/W)
-  0xff05  TIMA Timer counter (R/W)
-  0xff06  TMA  Timer Modulo (R/W)
-  0xff07  TAC  Timer Control (R/W)
+===========  ========  ==========================
+  Address      Name      Description
+===========  ========  ==========================
+  0xff04       DIV       Divider Register (R/W)
+  0xff05       TIMA      Timer counter (R/W)
+  0xff06       TMA       Timer Modulo (R/W)
+  0xff07       TAC       Timer Control (R/W)
+===========  ========  ==========================
+
+Sources
+-------
+
+* `<https://gbdev.io/pandocs/#timer-and-divider-registers>`_
 
 ]##
 import

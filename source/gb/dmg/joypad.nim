@@ -1,6 +1,12 @@
 ##[
 
-  * `https://gbdev.io/pandocs/#joypad-input`_
+Joypad
+======
+
+Sources
+-------
+
+* `<https://gbdev.io/pandocs/#joypad-input>`_
 
 ]##
 import

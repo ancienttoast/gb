@@ -1,19 +1,41 @@
 ##[
 
-  Video Ppu
-  ===========================
+Pixel Processing Unit
+=====================
 
-  160x144
+160x144
 
-  Memory map
-  ----------
+::
+  Single line of pixels (fixed 456 cycles)
 
+            2222 3333333
+  Scan Line  ----------->
+            000000000000
+  H Blank    <-----------
+
+  Mode 2  80 cycles (2 cycles per entry in OAM)
+  Mode 3  Variable length (168 to 291)
+  Mode 0  Variable length, whatever it takes to reach 456 cycles
+  Mode 1  456 * 10 = 4560 cycles
+
+Dot frequency: 4194304
+
+Entire refresh
+::
+  (Search OAM + Transfer data + H-Blank) * 144 + V-Blank
+  456 * 144 + 4560 = 70224
+
+Memory map
+----------
+
+::
   0xff40  LCDC LCD Control Register
+
   0xff47-0xff49  Monochrome palettes - Non CGB mode only
     0xff47  BGP  - BG Palette (R/W)
     0xff48  OBP0 - Object Palette 0 (R/W)
     0xff49  OBP1 - Object Palette 1 (R/W)
-  
+
   0x8000-0x9fff  VRAM
     0x8000-0x97ff  Tile Data
       0x8000-0x87ff  Block 0
@@ -21,30 +43,15 @@
       0x9000-0x97ff  Block 2
     0x9800-0x9bff  BG Map 0
     0x9c00-0x9fff  BG Map 1
+
   0xfe00-0xfe9f  OAM
 
-  Single line of pixels (fixed 456 cycles)
+Sources
+-------
 
-              2222 3333333
-    Scan Line  ----------->
-              000000000000
-    H Blank    <-----------
-
-    Mode 2  80 cycles (2 cycles per entry in OAM)
-    Mode 3  Variable length (168 to 291)
-    Mode 0  Variable length, whatever it takes to reach 456 cycles
-    Mode 1  456 * 10 = 4560 cycles
-  
-  Dot frequency
-    4194304
-  
-  Entire refresh
-    (Search OAM + Transfer data + H-Blank) * 144 + V-Blank
-    456 * 144 + 4560 = 70224
-
-  * `https://gbdev.io/pandocs/#video-display`_
-  * `https://nnarain.github.io/2016/09/09/Gameboy-LCD-Controller.html`_
-  * `https://www.reddit.com/r/EmuDev/comments/8uahbc/dmg_bgb_lcd_timings_and_cnt/e1iooum/`_
+* `<https://gbdev.io/pandocs/#video-display>`_
+* `<https://nnarain.github.io/2016/09/09/Gameboy-LCD-Controller.html>`_
+* `<https://www.reddit.com/r/EmuDev/comments/8uahbc/dmg_bgb_lcd_timings_and_cnt/e1iooum/>`_
 
 ]##
 import

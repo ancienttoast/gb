@@ -1,5 +1,12 @@
 ##[
 
+Memory Controller Unit
+======================
+
+Memory map
+----------
+
+::
   0x0000-0x7fff
       0x0000-0x3fff ROM Bank 0
           0x0000-0x00ff Interrupt vector table 
@@ -22,7 +29,10 @@
   0xff80-0xfffe High RAM (HRAM)
   0xffff-0xffff Interrupts Enable Register (IE)
 
-  * `http://gameboy.mongenel.com/dmg/asmmemmap.html`_
+Sources
+-------
+
+* `<http://gameboy.mongenel.com/dmg/asmmemmap.html>`_
 
 ]##
 
@@ -161,6 +171,7 @@ proc setHandler*(self: Mcu, slot: MemSlot, handler: MemHandler) =
   self.handlers[slot] = handler
 
 proc setHandler*(self: Mcu, slot: MemSlot, values: ptr seq[uint8]) =
+  # TODO: This is only commented out for the tests
   #assert MemSlotSize[slot].len == values[].len
   self.setHandler(slot,
     MemHandler(

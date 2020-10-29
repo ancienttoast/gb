@@ -1,24 +1,44 @@
-#[
+##[
 
-  Header - 0x0100-0x014f
+Cartridges and Memory Bank Controllers
+======================================
 
-    0100-0103 - Entry Point
-    0104-0133 - Nintendo Logo
-    0134-0143 - Title
-      013f-0142 - Manufacturer Code
-      0143 - CGB Flag
-    0144-0145 - New Licensee Code
-    0146 - SGB Flag
-    0147 - Cartridge Type
-    0148 - ROM Size
-    0149 - RAM Size
-    014a - Destination Code
-    014b - Old Licensee Code
-    014c - Mask ROM Version number
-    014d - Header Checksum
-    014e-014f - Global Checksum
+Memory map
+----------
 
-]#
+=================  =========================
+  Address            Description
+=================  =========================
+  0x0100-0x0103      Entry Point
+  0x0104-0x0133      Nintendo Logo
+  0x0134-0x0143      Title
+  0x0144-0x0145      New Licensee Code
+  0x0146             SGB Flag
+  0x0147             Cartridge Type
+  0x0148             ROM Size
+  0x0149             RAM Size
+  0x014a             Destination Code
+  0x014b             Old Licensee Code
+  0x014c             Mask ROM Version number
+  0x014d             Header Checksum
+  0x014e-0x014f      Global Checksum
+=================  =========================
+
+*CGB* specifies a special meaning for the Title section
+
+===============  =========================
+  Address          Description
+===============  =========================
+0x013f-0x0142    Manufacturer Code
+0x0143           CGB Flag
+===============  =========================
+
+Sources
+-------
+
+* `<https://gbdev.io/pandocs/#the-cartridge-header>`_
+
+]##
 import
   mem
 
@@ -56,26 +76,26 @@ type
     ctHuc1RamBattery = 0xff
   
   CartridgeRomSize = enum
-    crs32KByte  = 0x00 # 32KByte (no ROM banking)
-    crs64KByte  = 0x01 # 64KByte (4 banks)
-    crs128KByte = 0x02 # 128KByte (8 banks)
-    crs256KByte = 0x03 # 256KByte (16 banks)
-    crs512KByte = 0x04 # 512KByte (32 banks)
-    crs1MByte   = 0x05 # 1MByte (64 banks)  - only 63 banks used by MBC1
-    crs2MByte   = 0x06 # 2MByte (128 banks) - only 125 banks used by MBC1
-    crs4MByte   = 0x07 # 4MByte (256 banks)
-    crs8MByte   = 0x08 # 8MByte (512 banks)
-    crs11MByte  = 0x52 # 1.1MByte (72 banks)
-    crs12MByte  = 0x53 # 1.2MByte (80 banks)
-    crs15MByte  = 0x54 # 1.5MByte (96 banks)
+    crs32KByte  = 0x00 ## 32KByte (no ROM banking)
+    crs64KByte  = 0x01 ## 64KByte (4 banks)
+    crs128KByte = 0x02 ## 128KByte (8 banks)
+    crs256KByte = 0x03 ## 256KByte (16 banks)
+    crs512KByte = 0x04 ## 512KByte (32 banks)
+    crs1MByte   = 0x05 ## 1MByte (64 banks)  - only 63 banks used by MBC1
+    crs2MByte   = 0x06 ## 2MByte (128 banks) - only 125 banks used by MBC1
+    crs4MByte   = 0x07 ## 4MByte (256 banks)
+    crs8MByte   = 0x08 ## 8MByte (512 banks)
+    crs11MByte  = 0x52 ## 1.1MByte (72 banks)
+    crs12MByte  = 0x53 ## 1.2MByte (80 banks)
+    crs15MByte  = 0x54 ## 1.5MByte (96 banks)
   
   CartridgeRamSize = enum
     crsNone      = 0x00
-    crs2KBytes   = 0x01 # 2 KBytes
-    crs8Kbytes   = 0x02 # 8 Kbytes
-    crs32KBytes  = 0x03 # 32 KBytes (4 banks of 8KBytes each)
-    crs128KBytes = 0x04 # 128 KBytes (16 banks of 8KBytes each)
-    crs64KBytes  = 0x05 # 64 KBytes (8 banks of 8KBytes each)
+    crs2KBytes   = 0x01 ## 2 KBytes
+    crs8Kbytes   = 0x02 ## 8 Kbytes
+    crs32KBytes  = 0x03 ## 32 KBytes (4 banks of 8KBytes each)
+    crs128KBytes = 0x04 ## 128 KBytes (16 banks of 8KBytes each)
+    crs64KBytes  = 0x05 ## 64 KBytes (8 banks of 8KBytes each)
 
 
 const
@@ -96,11 +116,11 @@ const
 ########################################################################################]#
 
 proc initMbcNone(mcu: Mcu, data: ptr string) =
-  assert data[].len == 32768
+  assert data[].len == RomBankSize*2
   let
     handler = MemHandler(
       read: proc(address: MemAddress): uint8 =
-        cast[uint8](data[address.int]),
+        data[address.int].uint8,
       write: proc(address: MemAddress, value: uint8) =
         discard
     )
