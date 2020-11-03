@@ -236,4 +236,4 @@ proc draw*(self: MemoryEditor, title: string, data_provider: DataProviderProc, d
           self.dataEditingAddr = goto_addr
           self.dataEditingTakeFocus = true
     igPopItemWidth()
-    igEnd()
+  igEnd()
