@@ -4,7 +4,7 @@ import
   imageman,
   style, gb/dmg/[dmg, cpu, mem, timer, ppu, joypad], shell/render
 import
-  mem_editor
+  mem_editor, file_popup
 
 when defined(profiler):
   import nimprof
@@ -250,6 +250,7 @@ proc main*() =
     ppuWindow = initPpuWindow()
     editor = newMemoryEditor()
     mainTexture = initTexture()
+    filePopup = initFilePopup("Open file")
     gbRunning = true
     states: array[10, Option[DmgState]]
     painter = initPainter(PaletteDefault)
@@ -318,6 +319,9 @@ proc main*() =
 
     if igBeginMainMenuBar():
       if igBeginMenu("File"):
+        if igMenuItem("Open"):
+          filePopup.isVisible = true
+        igSeparator()
         if igMenuItem("Options"):
           showOptions = true
         igEndMenu()
@@ -387,6 +391,13 @@ proc main*() =
     
     if showCpu:
       cpuWindow(gameboy.cpu.state)
+    
+    var
+      path: string
+    if filePopup.render(path):
+      gameboy.load(readFile(path))
+      gbRunning = true
+      isRunning = true
 
     if showControls:
       igSetNextWindowPos(ImVec2(x: 4, y: 24), FirstUseEver)
