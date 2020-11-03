@@ -7,8 +7,8 @@ import
 type
   Palette = array[PpuGrayShade, ColorRGBU]
 
-  DmgPainter = object
-    palette: Palette
+  DmgPainter* = object
+    palette*: Palette
 
 proc initPainter*(palette: Palette): DmgPainter =
   DmgPainter(

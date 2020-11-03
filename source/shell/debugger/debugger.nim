@@ -43,6 +43,18 @@ proc destroy(self: Texture) =
 proc igTexture(self: Texture, scale: float) =
   igImage(cast[pointer](self.texture), ImVec2(x: self.width.float32 * scale, y: self.height.float32 * scale))
 
+proc igColorEdit3(label: cstring, col: var ColorRGBU, flags: ImGuiColorEditFlags = 0.ImGuiColorEditFlags): bool {.discardable.} =
+  var
+    floatColor: array[3, float32]
+  floatColor[0] = col[0].int / 255
+  floatColor[1] = col[1].int / 255
+  floatColor[2] = col[2].int / 255
+  result = igColorEdit3(label, floatColor, flags)
+  if result:
+    col[0] = (floatColor[0] * 255).uint8
+    col[1] = (floatColor[1] * 255).uint8
+    col[2] = (floatColor[2] * 255).uint8
+
 template `or`(a, b: ImGuiWindowFlags): ImGuiWindowFlags =
   (a.int or b.int).ImGuiWindowFlags
 
@@ -101,8 +113,7 @@ proc draw(self: PpuWindow, ppu: Ppu) =
     painter = initPainter(PaletteDefault)
   igSetNextWindowPos(ImVec2(x: 745, y: 24), FirstUseEver)
   igSetNextWindowSize(ImVec2(x: 530, y: 570), FirstUseEver)
-  igBegin("Ppu", flags = ImGuiWindowFlags.NoResize or ImGuiWindowFlags.NoCollapse)
-  if not igIsWindowCollapsed():
+  if igBegin("Ppu", flags = ImGuiWindowFlags.NoResize):
     if igBeginTabBar("display"):
       if igBeginTabItem("BG map"):
         let
@@ -235,11 +246,13 @@ proc main*() =
     showControls = true
     showCpu = true
     showDemo = false
+    showOptions = false
     ppuWindow = initPpuWindow()
     editor = newMemoryEditor()
     mainTexture = initTexture()
     gbRunning = true
     states: array[10, Option[DmgState]]
+    painter = initPainter(PaletteDefault)
 
   gameboy.load(readFile(Rom))
 
@@ -304,6 +317,10 @@ proc main*() =
     igNewFrame()
 
     if igBeginMainMenuBar():
+      if igBeginMenu("File"):
+        if igMenuItem("Options"):
+          showOptions = true
+        igEndMenu()
       if igBeginMenu("Window"):
         igCheckbox("Controls", addr showControls) 
         igCheckbox("Ppu", addr showPpu)
@@ -330,6 +347,27 @@ proc main*() =
         igEndMenu()
       igEndMainMenuBar()
 
+    let
+      center = ImVec2(x: igGetIO().displaySize.x * 0.5, y: igGetIO().displaySize.y * 0.5)
+    igSetNextWindowPos(center, ImGuiCond.Appearing, ImVec2(x: 0.5, y: 0.5))
+    if showOptions:
+      igOpenPopup("Options")
+    if igBeginPopupModal("Options", addr showOptions, ImGuiWindowFlags.AlwaysAutoResize):
+      if igBeginTabBar("options"):
+        if igBeginTabItem("Rendering"):
+          igText("DMG Palette color")
+          igColorEdit3("White", painter.palette[gsWhite])
+          igColorEdit3("Light Gray", painter.palette[gsLightGray])
+          igColorEdit3("Dark Gray", painter.palette[gsDarkGray])
+          igColorEdit3("Black", painter.palette[gsBlack])
+          # TODO
+          if igButton("Load"): discard
+          igSameLine()
+          if igButton("Save"): discard
+          igEndTabItem()
+        igEndTabBar()
+      igEndPopup()
+
     if showPpu:
       ppuWindow.draw(gameboy.ppu)
 
@@ -340,10 +378,8 @@ proc main*() =
     
     igSetNextWindowPos(ImVec2(x: 402, y: 24), FirstUseEver)
     igSetNextWindowSize(ImVec2(x: 338, y: 326), FirstUseEver)
-    igBegin(&"Main", flags = ImGuiWindowFlags.NoResize or ImGuiWindowFlags.NoCollapse)
-    if not igIsWindowCollapsed():
+    if igBegin("Main", flags = ImGuiWindowFlags.NoResize):
       let
-        painter = initPainter(PaletteDefault)
         image = painter.renderLcd(gameboy.ppu)
       mainTexture.upload(image)
       igImage(cast[pointer](mainTexture.texture), ImVec2(x: mainTexture.width.float32 * 2, y: mainTexture.height.float32 * 2))
@@ -355,57 +391,56 @@ proc main*() =
     if showControls:
       igSetNextWindowPos(ImVec2(x: 4, y: 24), FirstUseEver)
       igSetNextWindowSize(ImVec2(x: 151, y: 156), FirstUseEver)
-      igBegin("Controls")
+      if igBegin("Controls"):
+        if igButton("Reset"):
+          gameboy = newGameboy(if BootRom == "": "" else: readFile(BootRom))
+          gameboy.load(readFile(Rom))
+          gbRunning = true
 
-      if igButton("Reset"):
-        gameboy = newGameboy(if BootRom == "": "" else: readFile(BootRom))
-        gameboy.load(readFile(Rom))
-        gbRunning = true
-      
-      igSeparator()
+        igSeparator()
 
-      if igButton("Play"):
-        isRunning = true
+        if igButton("Play"):
+          isRunning = true
 
-      if igButton("Pause"):
-        isRunning = false
+        if igButton("Pause"):
+          isRunning = false
 
-      if igButton("Step"):
-        isRunning = false
-        let
-          cycles = gameboy.cpu.step(gameboy.mcu)
-        gameboy.timer.step(cycles)
-        for i in 0..<cycles:
-          discard gameboy.ppu.step()
-      
-      igSeparator()
+        if igButton("Step"):
+          isRunning = false
+          let
+            cycles = gameboy.cpu.step(gameboy.mcu)
+          gameboy.timer.step(cycles)
+          for i in 0..<cycles:
+            discard gameboy.ppu.step()
 
-      if igButton("Dump memory"):
-        let
-          s = newFileStream("memdump.txt", fmWrite)
-        var
-          i = 0
-        for address in 0..0xffff:
-          if i == 0:
-            s.write(&"{address:#06x}\t")
-          s.write(&"{gameboy.mcu[address.MemAddress]:02x}")
-          i += 1
-          if i == 8:
-            s.write("\t")
-          else:
-            s.write(" ")
-          if i == 16:
-            s.write("\n")
+        igSeparator()
+
+        if igButton("Dump memory"):
+          let
+            s = newFileStream("memdump.txt", fmWrite)
+          var
             i = 0
+          for address in 0..0xffff:
+            if i == 0:
+              s.write(&"{address:#06x}\t")
+            s.write(&"{gameboy.mcu[address.MemAddress]:02x}")
+            i += 1
+            if i == 8:
+              s.write("\t")
+            else:
+              s.write(" ")
+            if i == 16:
+              s.write("\n")
+              i = 0
 
 
-      igSeparator()
+        igSeparator()
 
-      igCheckbox("gbRunning", addr gbRunning)
-      if isRunning:
-        igText(&"{speed:6.2f}")
-      else:
-        igText("-")
+        igCheckbox("gbRunning", addr gbRunning)
+        if isRunning:
+          igText(&"{speed:6.2f}")
+        else:
+          igText("-")
       igEnd()
     
     if showDemo:
