@@ -68,7 +68,7 @@ type
 const
   MemSlotSize: array[MemSlot, MemArea] = [
     0x0000'u16..0x7fff'u16,
-    0x0000'u16..0x0100'u16,
+    0x0000'u16..0x00ff'u16,
     0x8000'u16..0x9fff'u16,
     0xa000'u16..0xbfff'u16,
     0xc000'u16..0xdfff'u16,
