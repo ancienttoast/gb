@@ -1,7 +1,7 @@
 import
   std/unittest,
   nimPNG, imageman,
-  gb/dmg/dmg, shell/render
+  gb/gameboy, gb/dmg/dmg, shell/render
 
 
 
@@ -17,10 +17,11 @@ suite "dmg-acid2":
     var
       gameboy = newGameboy("")
     gameboy.load(readFile("tests/rom/dmg_acid2/dmg-acid2.gb"))
+    check gameboy.kind == gkDMG
 
-    while gameboy.cycles < 4424398:
+    while gameboy.dmg.cycles < 4424398:
       discard gameboy.step()
 
     let
-      result = initPainter(PaletteBlackAndWhite).renderLcd(gameboy.ppu)
+      result = initPainter(PaletteBlackAndWhite).renderLcd(gameboy.dmg.ppu)
     checkLcd("tests/rom/dmg_acid2/reference-dmg.png", result)

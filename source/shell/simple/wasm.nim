@@ -1,6 +1,6 @@
 import
   sdl2,
-  gb/dmg/[dmg, joypad]
+  gb/gameboy
 
 
 
@@ -50,14 +50,14 @@ proc main*() =
         let
           m = cast[KeyboardEventPtr](addr event)
         case m.keysym.scancode
-        of SDL_SCANCODE_A: gameboy.joypad[kA] = m.state == KeyPressed.uint8
-        of SDL_SCANCODE_S: gameboy.joypad[kB] = m.state == KeyPressed.uint8
-        of SDL_SCANCODE_RETURN: gameboy.joypad[kStart] = m.state == KeyPressed.uint8
-        of SDL_SCANCODE_RSHIFT: gameboy.joypad[kSelect] = m.state == KeyPressed.uint8
-        of SDL_SCANCODE_UP: gameboy.joypad[kUp] = m.state == KeyPressed.uint8
-        of SDL_SCANCODE_LEFT: gameboy.joypad[kLeft] = m.state == KeyPressed.uint8
-        of SDL_SCANCODE_DOWN: gameboy.joypad[kDown] = m.state == KeyPressed.uint8
-        of SDL_SCANCODE_RIGHT: gameboy.joypad[kRight] = m.state == KeyPressed.uint8
+        of SDL_SCANCODE_A: gameboy.input(iA, m.state == KeyPressed.uint8)
+        of SDL_SCANCODE_S: gameboy.input(iB, m.state == KeyPressed.uint8)
+        of SDL_SCANCODE_RETURN: gameboy.input(iStart, m.state == KeyPressed.uint8)
+        of SDL_SCANCODE_RSHIFT: gameboy.input(iSelect, m.state == KeyPressed.uint8)
+        of SDL_SCANCODE_UP: gameboy.input(iUp, m.state == KeyPressed.uint8)
+        of SDL_SCANCODE_LEFT: gameboy.input(iLeft, m.state == KeyPressed.uint8)
+        of SDL_SCANCODE_DOWN: gameboy.input(iDown, m.state == KeyPressed.uint8)
+        of SDL_SCANCODE_RIGHT: gameboy.input(iRight, m.state == KeyPressed.uint8)
         else:
           discard
       else:

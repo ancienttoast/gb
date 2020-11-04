@@ -19,7 +19,7 @@ type
   DataProviderProc = proc(adress: int): uint8
   DataSetterProc = proc(adress: int, value: uint8)
 
-  MemoryEditor = ref object
+  MemoryEditor* = ref object
     open*: bool
     allowEdits: bool
     rows: int32
@@ -47,7 +47,9 @@ proc get_cursor_pos(data: ptr ImGuiInputTextCallbackData): int32 {.cdecl.} =
   return 0
 
 proc draw*(self: MemoryEditor, title: string, data_provider: DataProviderProc, data_setter: DataSetterProc, mem_size: int, base_display_addr = 0) =
-  if self.open and igBegin(title, addr self.open):
+  if not self.open:
+    return
+  if igBegin(title, addr self.open):
     igBeginChild("##scrolling", ImVec2(x: 0, y: -igGetFrameHeightWithSpacing()))
 
     igPushStyleVar(ImGuiStyleVar.FramePadding, ImVec2(x: 0, y: 0))

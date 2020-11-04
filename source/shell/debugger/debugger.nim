@@ -2,7 +2,7 @@ import
   std/[strformat, times, monotimes, options, streams],
   opengl, nimgl/imgui, sdl2, impl_sdl, impl_opengl,
   imageman,
-  style, gb/dmg/[dmg, cpu, mem, timer, ppu, joypad], shell/render
+  style, gb/gameboy, gb/dmg/[cpu, mem, ppu], shell/render
 import
   mem_editor, file_popup
 
@@ -59,11 +59,20 @@ template `or`(a, b: ImGuiWindowFlags): ImGuiWindowFlags =
   (a.int or b.int).ImGuiWindowFlags
 
 
-proc cpuWindow(state: CpuState) =
-  igSetNextWindowPos(ImVec2(x: 4, y: 185), FirstUseEver)
-  igSetNextWindowSize(ImVec2(x: 151, y: 196), FirstUseEver)
-  igBegin("CPU")
-  if not igIsWindowCollapsed():
+proc showDemoWindow(isOpen: var bool) =
+  if not isOpen:
+    return
+  igShowDemoWindow(addr isOpen)
+
+proc cpuWindow(isOpen: var bool, gameboy: Gameboy) =
+  assert gameboy.kind == gkDMG
+  if not isOpen:
+    return
+  let
+    state = gameboy.dmg.cpu.state
+  igSetNextWindowPos(ImVec2(x: 503, y: 25), FirstUseEver)
+  igSetNextWindowSize(ImVec2(x: 220, y: 326), FirstUseEver)
+  if igBegin("CPU", addr isOpen):
     for r in Register16:
       igTextDisabled($r)
       igSameLine()
@@ -100,6 +109,14 @@ proc cpuWindow(state: CpuState) =
     igText(&"{state.status}")
   igEnd()
 
+proc draw(editor: MemoryEditor, gameboy: Gameboy) =
+  let
+    provider = proc(address: int): uint8 = gameboy.dmg.mcu[address.uint16]
+    setter = proc(address: int, value: uint8) = gameboy.dmg.mcu[address.uint16] = value
+  igSetNextWindowPos(ImVec2(x: 160, y: 358), FirstUseEver)
+  igSetNextWindowSize(ImVec2(x: 563, y: 303), FirstUseEver)
+  editor.draw("Memory editor", provider, setter, 0xffff)
+
 
 type
   PpuWindow = ref object
@@ -108,12 +125,16 @@ type
     spriteTexture: Texture
     oamTextures: array[40, Texture]
 
-proc draw(self: PpuWindow, ppu: Ppu) =
+proc draw(self: PpuWindow, isOpen: var bool, gameboy: Gameboy) =
+  assert gameboy.kind == gkDMG
+  if not isOpen:
+    return
   let
+    ppu = gameboy.dmg.ppu
     painter = initPainter(PaletteDefault)
-  igSetNextWindowPos(ImVec2(x: 745, y: 24), FirstUseEver)
+  igSetNextWindowPos(ImVec2(x: 728, y: 25), FirstUseEver)
   igSetNextWindowSize(ImVec2(x: 530, y: 570), FirstUseEver)
-  if igBegin("Ppu", flags = ImGuiWindowFlags.NoResize):
+  if igBegin("Ppu", addr isOpen, flags = ImGuiWindowFlags.NoResize):
     if igBeginTabBar("display"):
       if igBeginTabItem("BG map"):
         let
@@ -252,7 +273,7 @@ proc main*() =
     mainTexture = initTexture()
     filePopup = initFilePopup("Open file")
     gbRunning = true
-    states: array[10, Option[DmgState]]
+    states: array[10, Option[GameboyState]]
     painter = initPainter(PaletteDefault)
 
   gameboy.load(readFile(Rom))
@@ -271,14 +292,14 @@ proc main*() =
         let
           m = cast[KeyboardEventPtr](addr event)
         case m.keysym.scancode
-        of SDL_SCANCODE_A: gameboy.joypad[kA] = m.state == KeyPressed.uint8
-        of SDL_SCANCODE_S: gameboy.joypad[kB] = m.state == KeyPressed.uint8
-        of SDL_SCANCODE_RETURN: gameboy.joypad[kStart] = m.state == KeyPressed.uint8
-        of SDL_SCANCODE_RSHIFT: gameboy.joypad[kSelect] = m.state == KeyPressed.uint8
-        of SDL_SCANCODE_UP: gameboy.joypad[kUp] = m.state == KeyPressed.uint8
-        of SDL_SCANCODE_LEFT: gameboy.joypad[kLeft] = m.state == KeyPressed.uint8
-        of SDL_SCANCODE_DOWN: gameboy.joypad[kDown] = m.state == KeyPressed.uint8
-        of SDL_SCANCODE_RIGHT: gameboy.joypad[kRight] = m.state == KeyPressed.uint8
+        of SDL_SCANCODE_A: gameboy.input(iA, m.state == KeyPressed.uint8)
+        of SDL_SCANCODE_S: gameboy.input(iB, m.state == KeyPressed.uint8)
+        of SDL_SCANCODE_RETURN: gameboy.input(iStart, m.state == KeyPressed.uint8)
+        of SDL_SCANCODE_RSHIFT: gameboy.input(iSelect, m.state == KeyPressed.uint8)
+        of SDL_SCANCODE_UP: gameboy.input(iUp, m.state == KeyPressed.uint8)
+        of SDL_SCANCODE_LEFT: gameboy.input(iLeft, m.state == KeyPressed.uint8)
+        of SDL_SCANCODE_DOWN: gameboy.input(iDown, m.state == KeyPressed.uint8)
+        of SDL_SCANCODE_RIGHT: gameboy.input(iRight, m.state == KeyPressed.uint8)
         of SDL_SCANCODE_ESCAPE:
           if m.state == KeyReleased.uint8:
             isOpen = false
@@ -309,7 +330,7 @@ proc main*() =
       except:
         echo getCurrentException().msg
         echo getStackTrace(getCurrentException())
-        echo "cpu\t", gameboy.cpu.state
+        echo "cpu\t", gameboy.dmg.cpu.state
         #echo "display\t", gameboy.display.state
         gbRunning = false
 
@@ -372,25 +393,22 @@ proc main*() =
         igEndTabBar()
       igEndPopup()
 
-    if showPpu:
-      ppuWindow.draw(gameboy.ppu)
-
-    let
-      provider = proc(address: int): uint8 = gameboy.mcu[address.uint16]
-      setter = proc(address: int, value: uint8) = gameboy.mcu[address.uint16] = value
-    editor.draw("Memory editor", provider, setter, 0xffff)
+    ppuWindow.draw(showPpu, gameboy)
+    editor.draw(gameboy)
     
-    igSetNextWindowPos(ImVec2(x: 402, y: 24), FirstUseEver)
+    igSetNextWindowPos(ImVec2(x: 160, y: 25), FirstUseEver)
     igSetNextWindowSize(ImVec2(x: 338, y: 326), FirstUseEver)
-    if igBegin("Main", flags = ImGuiWindowFlags.NoResize):
+    if igBegin("Main"):
       let
-        image = painter.renderLcd(gameboy.ppu)
+        image = painter.renderLcd(gameboy.dmg.ppu)
       mainTexture.upload(image)
-      igImage(cast[pointer](mainTexture.texture), ImVec2(x: mainTexture.width.float32 * 2, y: mainTexture.height.float32 * 2))
+      var
+        size: ImVec2
+      igGetContentRegionAvailNonUDT(addr size)
+      igImage(cast[pointer](mainTexture.texture), size)
     igEnd()
-    
-    if showCpu:
-      cpuWindow(gameboy.cpu.state)
+
+    cpuWindow(showCpu, gameboy)
     
     var
       path: string
@@ -401,7 +419,7 @@ proc main*() =
 
     if showControls:
       igSetNextWindowPos(ImVec2(x: 4, y: 24), FirstUseEver)
-      igSetNextWindowSize(ImVec2(x: 151, y: 156), FirstUseEver)
+      igSetNextWindowSize(ImVec2(x: 151, y: 231), FirstUseEver)
       if igBegin("Controls"):
         if igButton("Reset"):
           gameboy = newGameboy(if BootRom == "": "" else: readFile(BootRom))
@@ -418,11 +436,7 @@ proc main*() =
 
         if igButton("Step"):
           isRunning = false
-          let
-            cycles = gameboy.cpu.step(gameboy.mcu)
-          gameboy.timer.step(cycles)
-          for i in 0..<cycles:
-            discard gameboy.ppu.step()
+          discard gameboy.step()
 
         igSeparator()
 
@@ -434,7 +448,7 @@ proc main*() =
           for address in 0..0xffff:
             if i == 0:
               s.write(&"{address:#06x}\t")
-            s.write(&"{gameboy.mcu[address.MemAddress]:02x}")
+            s.write(&"{gameboy.dmg.mcu[address.MemAddress]:02x}")
             i += 1
             if i == 8:
               s.write("\t")
@@ -443,6 +457,7 @@ proc main*() =
             if i == 16:
               s.write("\n")
               i = 0
+          s.close()
 
 
         igSeparator()
@@ -453,9 +468,8 @@ proc main*() =
         else:
           igText("-")
       igEnd()
-    
-    if showDemo:
-      igShowDemoWindow(addr showDemo)
+
+    showDemoWindow(showDemo)
 
     igRender()
 

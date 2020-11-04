@@ -2,7 +2,7 @@ import
   pspsdk/[pspmoduleinfo, pspkerneltypes, psptypes, psploadexec, pspthreadman, pspdisplay],
   pspsdk/[pspgu, pspgum, pspctrl],
   imageman,
-  gb/dmg/[dmg, joypad]
+  gb/gameboy
 
 
 
@@ -127,14 +127,14 @@ proc main*() =
     var
       pad: SceCtrlData
     discard sceCtrlReadBufferPositive(addr pad, 1)
-    gameboy.joypad[kA] = (pad.Buttons and PSP_CTRL_CIRCLE.cuint) != 0.cuint
-    gameboy.joypad[kB] = (pad.Buttons and PSP_CTRL_CROSS.cuint) != 0.cuint
-    gameboy.joypad[kStart] = (pad.Buttons and PSP_CTRL_START.cuint) != 0.cuint
-    gameboy.joypad[kSelect] = (pad.Buttons and PSP_CTRL_SELECT.cuint) != 0.cuint
-    gameboy.joypad[kUp] = (pad.Buttons and PSP_CTRL_UP.cuint) != 0.cuint
-    gameboy.joypad[kLeft] = (pad.Buttons and PSP_CTRL_LEFT.cuint) != 0.cuint
-    gameboy.joypad[kDown] = (pad.Buttons and PSP_CTRL_DOWN.cuint) != 0.cuint
-    gameboy.joypad[kRight] = (pad.Buttons and PSP_CTRL_RIGHT.cuint) != 0.cuint
+    gameboy.input(iA, (pad.Buttons and PSP_CTRL_CIRCLE.cuint) != 0.cuint)
+    gameboy.input(iB, (pad.Buttons and PSP_CTRL_CROSS.cuint) != 0.cuint)
+    gameboy.input(iStart, (pad.Buttons and PSP_CTRL_START.cuint) != 0.cuint)
+    gameboy.input(iSelect, (pad.Buttons and PSP_CTRL_SELECT.cuint) != 0.cuint)
+    gameboy.input(iUp, (pad.Buttons and PSP_CTRL_UP.cuint) != 0.cuint)
+    gameboy.input(iLeft, (pad.Buttons and PSP_CTRL_LEFT.cuint) != 0.cuint)
+    gameboy.input(iDown, (pad.Buttons and PSP_CTRL_DOWN.cuint) != 0.cuint)
+    gameboy.input(iRight, (pad.Buttons and PSP_CTRL_RIGHT.cuint) != 0.cuint)
 
     let
       image = gameboy.frame(isRunning)

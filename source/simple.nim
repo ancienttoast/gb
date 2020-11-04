@@ -3,7 +3,7 @@ when defined(profiler):
 
 import
   imageman,
-  gb/dmg/dmg, shell/render
+  gb/gameboy, shell/render
 
 
 const
@@ -14,16 +14,16 @@ proc init(): Gameboy =
   result = newGameboy(BootRom)
   result.load(Rom)
 
-proc frame(dmg: Gameboy, isRunning: var bool): Image[ColorRGBU] =
+proc frame(gameboy: Gameboy, isRunning: var bool): Image[ColorRGBU] =
   try:
     var
       needsRedraw = false
     while not needsRedraw:
-      needsRedraw = needsRedraw or dmg.step()
+      needsRedraw = needsRedraw or gameboy.step()
   except:
     isRunning = false
 
-  result = initPainter(PaletteDefault).renderLcd(dmg.ppu)
+  result = initPainter(PaletteDefault).renderLcd(gameboy.dmg.ppu)
 
 
 

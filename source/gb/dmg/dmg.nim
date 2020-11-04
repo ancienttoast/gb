@@ -1,15 +1,4 @@
-##[
-
-  Gameboy models:
-    DMG   Game Boy
-    MGB   Game Boy Pocket
-    SGB   Super Game Boy
-    SGB2  Super Game Boy 2
-    CGB   Game Boy Color
-
-]##
 import
-  std/times,
   mem, cpu, timer, ppu, cartridge, joypad
 
 
@@ -83,7 +72,6 @@ proc staticBoot(cpu: Cpu, mcu: Mcu) =
 
 type
   DmgState* = tuple
-    time: DateTime
     testMemory: seq[uint8]
     cpu: CpuState
     timer: TimerState
@@ -92,7 +80,7 @@ type
     cart: MbcState
 
 
-  Gameboy* = ref object
+  Dmg* = ref object
     mcu*: Mcu
     cpu*: Cpu
     timer*: Timer
@@ -105,7 +93,7 @@ type
     testMemory*: seq[uint8]
     cycles*: uint64
 
-proc load*(self: Gameboy, rom = "") =
+proc reset*(self: Dmg, rom = "") =
   self.testMemory = newSeq[uint8](uint16.high.int + 1)
 
   self.mcu.clearHandlers()
@@ -125,7 +113,7 @@ proc load*(self: Gameboy, rom = "") =
   
   self.cycles = 0
 
-proc step*(self: Gameboy): bool =
+proc step*(self: Dmg): bool =
   let
     cycles = self.cpu.step(self.mcu)
   self.cart.step(cycles)
@@ -135,8 +123,7 @@ proc step*(self: Gameboy): bool =
   self.cycles += cycles.uint64
 
 
-proc save*(self: Gameboy): DmgState =
-  result.time = now()
+proc save*(self: Dmg): DmgState =
   result.testMemory = self.testMemory
   result.cpu = self.cpu.state
   result.timer = self.timer.state
@@ -144,7 +131,7 @@ proc save*(self: Gameboy): DmgState =
   result.joypad = self.joypad.state
   result.cart = self.cart.state
 
-proc load*(self: Gameboy, state: DmgState) =
+proc load*(self: Dmg, state: DmgState) =
   self.testMemory = state.testMemory
   self.cpu.state = state.cpu
   self.timer.state = state.timer
@@ -153,10 +140,10 @@ proc load*(self: Gameboy, state: DmgState) =
   self.cart.state = state.cart
 
 
-proc newGameboy*(bootRom = ""): Gameboy =
+proc newDmg*(bootRom = ""): Dmg =
   let
     mcu = newMcu()
-  result = Gameboy(
+  result = Dmg(
     mcu: mcu,
     cpu: newCpu(mcu),
     timer: newTimer(mcu),
