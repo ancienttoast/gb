@@ -33,7 +33,7 @@ template modMem(mem: seq[uint8]): seq[uint8] =
 
 
 
-suite "LR35902 - Misc/control instructions":
+suite "unit.dmg.cpu: LR35902 - Misc/control instructions":
   cpuTest "NOP":
     mem[0] = 0x00'u8
     let
@@ -109,7 +109,7 @@ suite "LR35902 - Misc/control instructions":
     check cpu.state.ime == 1
 
 
-suite "LR35902 - Jumps/calls":
+suite "unit.dmg.cpu: LR35902 - Jumps/calls":
   cpuTest "RET":
     cpu.state.sp = 6
     mem[0] = 0xc9'u8
@@ -122,7 +122,7 @@ suite "LR35902 - Jumps/calls":
       oldM = mem.modMem
 
 
-suite "LR35902 - 8bit load/store/move instructions":
+suite "unit.dmg.cpu: LR35902 - 8bit load/store/move instructions":
   cpuTest "LD B,d8":
     mem[0] = 0x06'u8
     mem[1] = 5'u8
@@ -283,7 +283,7 @@ suite "LR35902 - 8bit load/store/move instructions":
       oldM = mem.modMem
 
 
-suite "LR35902 - 16bit load/store/move instructions":
+suite "unit.dmg.cpu: LR35902 - 16bit load/store/move instructions":
   for reg in [(0x01, rBC), (0x11, rDE), (0x21, rHL)]:
     cpuTest &"LD {reg[1]},0x1234":
       mem[0] = reg[0].uint8
@@ -387,7 +387,7 @@ suite "LR35902 - 16bit load/store/move instructions":
       oldM = mem.modMem
 
 
-suite "LR35902 - 16bit arithmetic/logical instructions":
+suite "unit.dmg.cpu: LR35902 - 16bit arithmetic/logical instructions":
   cpuTest "ADD HL,DE":
     mem[0] = 0x19'u8
     cpu.state[rHL] = 1
@@ -409,7 +409,7 @@ suite "LR35902 - 16bit arithmetic/logical instructions":
       oldM = mem.modMem
 
 
-suite "LR35902 - 8bit arithmetic/logical instructions":
+suite "unit.dmg.cpu: LR35902 - 8bit arithmetic/logical instructions":
   cpuTest "DEC r8 - 10":
     mem[0] = 0x05'u8
     cpu.state[rB] = 10
@@ -507,7 +507,7 @@ suite "LR35902 - 8bit arithmetic/logical instructions":
       oldM = mem.modMem
 
 
-suite "LR35902 - 8bit rotations/shifts and bit instructions":
+suite "unit.dmg.cpu: LR35902 - 8bit rotations/shifts and bit instructions":
   cpuTest "RL r8 - c=0 00000000":
     mem[0] = 0xcb
     mem[1] = 0x11
@@ -611,7 +611,7 @@ suite "LR35902 - 8bit rotations/shifts and bit instructions":
         m[3] = 0b00000001
 
 
-suite "LR35902 - combined":
+suite "unit.dmg.cpu: LR35902 - combined":
   test "set 16bit register":
     var
       mem = newSeq[uint8](8)

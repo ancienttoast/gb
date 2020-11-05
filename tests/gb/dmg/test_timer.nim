@@ -4,7 +4,7 @@ import
 
 
 
-suite "Timer - divider":
+suite "unit.dmg.timer: Timer - divider":
   test "autoincrement":
     var
       mcu = newMcu()
@@ -31,7 +31,7 @@ suite "Timer - divider":
     check timer.state.divider == 0
 
 
-suite "Timer - TIMA":
+suite "unit.dmg.timer: Timer - TIMA":
   test "autoincrement - freq 00":
     var
       mcu = newMcu()

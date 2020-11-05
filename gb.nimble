@@ -49,3 +49,10 @@ task psp, "psp":
 
     rmFile &"{name}.elf"
     rmFile &"{name}_strip.elf"
+
+task test, "Run the test suite":
+  var
+    tests = "unit*::"
+  if system.paramStr(system.paramCount()) != "test":
+    tests = system.paramStr(system.paramCount())
+  exec &"nim --run c tests/test.nim \"{tests}\""

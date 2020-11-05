@@ -1,3 +1,8 @@
+##[
+
+Source: <https://gbdev.gg8.se/files/roms/blargg-gb-tests/>
+
+]##
 import
   std/[unittest, strformat, os],
   nimPNG, imageman,
@@ -41,10 +46,10 @@ template testFull(name: string, rom: string, expected: string, stop: int) =
 template testCpu(file: string, stop: int) =
   let
     name = splitFile(file).name
-  testFull("cpu_instrs - " & name, "blargg/cpu_instrs/" & file, "result_cpu_instrs_" & name & ".png", stop)
+  testFull("cpu_instrs - " & name, "blargg/cpu_instrs/" & file, "expected_cpu_instrs_" & name & ".png", stop)
 
 
-suite "Blargg test roms":
+suite "rom.blargg: Blargg test roms":
   testCpu "individual/01-special.gb", 0xc7d2
   testCpu "individual/02-interrupts.gb", 0xc7f4
   testCpu "individual/03-op sp,hl.gb", 0xcb44
@@ -56,5 +61,5 @@ suite "Blargg test roms":
   testCpu "individual/09-op r,r.gb", 0xce67
   testCpu "individual/10-bit ops.gb", 0xcf58
   testCpu "individual/11-op a,(hl).gb", 0xcc62
-  testFull "cpu_instrs", "blargg/cpu_instrs/cpu_instrs.gb", "result_cpu_instrs.png", 0x06f1
-  testFull "instr_timing", "blargg/instr_timing/instr_timing.gb", "result_instr_timing.png", 0xc8b0
+  testFull "cpu_instrs", "blargg/cpu_instrs/cpu_instrs.gb", "expected_cpu_instrs.png", 0x06f1
+  testFull "instr_timing", "blargg/instr_timing/instr_timing.gb", "expected_instr_timing.png", 0xc8b0
