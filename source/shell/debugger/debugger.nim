@@ -55,9 +55,6 @@ proc igColorEdit3(label: cstring, col: var ColorRGBU, flags: ImGuiColorEditFlags
     col[1] = (floatColor[1] * 255).uint8
     col[2] = (floatColor[2] * 255).uint8
 
-template `or`(a, b: ImGuiWindowFlags): ImGuiWindowFlags =
-  (a.int or b.int).ImGuiWindowFlags
-
 
 proc showDemoWindow(isOpen: var bool) =
   if not isOpen:
@@ -70,8 +67,8 @@ proc cpuWindow(isOpen: var bool, gameboy: Gameboy) =
     return
   let
     state = gameboy.dmg.cpu.state
-  igSetNextWindowPos(ImVec2(x: 503, y: 25), FirstUseEver)
-  igSetNextWindowSize(ImVec2(x: 220, y: 326), FirstUseEver)
+  igSetNextWindowPos(ImVec2(x: 483, y: 25), FirstUseEver)
+  igSetNextWindowSize(ImVec2(x: 236, y: 318), FirstUseEver)
   if igBegin("CPU", addr isOpen):
     for r in Register16:
       igTextDisabled($r)
@@ -113,8 +110,8 @@ proc draw(editor: MemoryEditor, gameboy: Gameboy) =
   let
     provider = proc(address: int): uint8 = gameboy.dmg.mcu[address.uint16]
     setter = proc(address: int, value: uint8) = gameboy.dmg.mcu[address.uint16] = value
-  igSetNextWindowPos(ImVec2(x: 160, y: 358), FirstUseEver)
-  igSetNextWindowSize(ImVec2(x: 563, y: 303), FirstUseEver)
+  igSetNextWindowPos(ImVec2(x: 162, y: 348), FirstUseEver)
+  igSetNextWindowSize(ImVec2(x: 557, y: 300), FirstUseEver)
   editor.draw("Memory editor", provider, setter, 0xffff)
 
 
@@ -132,7 +129,7 @@ proc draw(self: PpuWindow, isOpen: var bool, gameboy: Gameboy) =
   let
     ppu = gameboy.dmg.ppu
     painter = initPainter(PaletteDefault)
-  igSetNextWindowPos(ImVec2(x: 728, y: 25), FirstUseEver)
+  igSetNextWindowPos(ImVec2(x: 724, y: 25), FirstUseEver)
   igSetNextWindowSize(ImVec2(x: 530, y: 570), FirstUseEver)
   if igBegin("Ppu", addr isOpen, flags = ImGuiWindowFlags.NoResize):
     if igBeginTabBar("display"):
@@ -260,6 +257,7 @@ proc main*() =
   styleVGui()
 
   var
+    speedBuffer = newSeq[float32](30)
     gameboy = newGameboy(if BootRom == "": "" else: readFile(BootRom))
     isOpen = true
     isRunning = true
@@ -272,7 +270,6 @@ proc main*() =
     editor = newMemoryEditor()
     mainTexture = initTexture()
     filePopup = initFilePopup("Open file")
-    gbRunning = true
     states: array[10, Option[GameboyState]]
     painter = initPainter(PaletteDefault)
 
@@ -311,7 +308,6 @@ proc main*() =
         if d.kind == DropFile:
           gameboy = newGameboy(if BootRom == "": "" else: readFile(BootRom))
           gameboy.load(readFile($d.file))
-          gbRunning = true
           isRunning = true
           freeClipboardText(d.file)
       else:
@@ -320,19 +316,17 @@ proc main*() =
     let
       dt = (getMonoTime() - start).inNanoseconds.int
       speed = (16_666_666 / dt) * 100
+    speedBuffer &= ( if isRunning: speed else: 0 )
+    speedBuffer.delete(0)
     start = getMonoTime()
     if isRunning:
       try:
-        var
-          needsRedraw = false
-        while not needsRedraw and gbRunning and isRunning:
-          needsRedraw = needsRedraw or gameboy.step()
+        gameboy.frame()
       except:
         echo getCurrentException().msg
         echo getStackTrace(getCurrentException())
         echo "cpu\t", gameboy.dmg.cpu.state
-        #echo "display\t", gameboy.display.state
-        gbRunning = false
+        isRunning = false
 
     igOpenGL3NewFrame()
     igImplSdl2NewFrame(window)
@@ -396,8 +390,8 @@ proc main*() =
     ppuWindow.draw(showPpu, gameboy)
     editor.draw(gameboy)
     
-    igSetNextWindowPos(ImVec2(x: 160, y: 25), FirstUseEver)
-    igSetNextWindowSize(ImVec2(x: 338, y: 326), FirstUseEver)
+    igSetNextWindowPos(ImVec2(x: 162, y: 25), FirstUseEver)
+    igSetNextWindowSize(ImVec2(x: 316, y: 318), FirstUseEver)
     if igBegin("Main"):
       let
         image = painter.renderLcd(gameboy.dmg.ppu)
@@ -414,17 +408,15 @@ proc main*() =
       path: string
     if filePopup.render(path):
       gameboy.load(readFile(path))
-      gbRunning = true
       isRunning = true
 
     if showControls:
-      igSetNextWindowPos(ImVec2(x: 4, y: 24), FirstUseEver)
-      igSetNextWindowSize(ImVec2(x: 151, y: 231), FirstUseEver)
+      igSetNextWindowPos(ImVec2(x: 5, y: 25), FirstUseEver)
+      igSetNextWindowSize(ImVec2(x: 152, y: 225), FirstUseEver)
       if igBegin("Controls"):
         if igButton("Reset"):
           gameboy = newGameboy(if BootRom == "": "" else: readFile(BootRom))
           gameboy.load(readFile(Rom))
-          gbRunning = true
 
         igSeparator()
 
@@ -437,6 +429,8 @@ proc main*() =
         if igButton("Step"):
           isRunning = false
           discard gameboy.step()
+
+        igCheckbox("Is running", addr isRunning)
 
         igSeparator()
 
@@ -459,21 +453,18 @@ proc main*() =
               i = 0
           s.close()
 
-
         igSeparator()
-
-        igCheckbox("gbRunning", addr gbRunning)
-        if isRunning:
-          igText(&"{speed:6.2f}")
-        else:
-          igText("-")
+        igPlotLines("Speed", addr speedBuffer[0], speedBuffer.len.int32,
+          overlay_text = &"{speedBuffer[speedBuffer.high]:6.2f}%",
+          scale_min = 0, scale_max = 1000,
+          graph_size = ImVec2(x: 0, y: 40))
       igEnd()
 
     showDemoWindow(showDemo)
 
     igRender()
 
-    glClearColor(0.45f, 0.55f, 0.60f, 1.00f)
+    glClearColor(0.45, 0.55, 0.60, 1.00)
     glClear(GL_COLOR_BUFFER_BIT)
 
     igOpenGL3RenderDrawData(igGetDrawData())

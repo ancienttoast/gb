@@ -68,13 +68,19 @@ proc load*(self: Gameboy, rom = "") =
   assert self.kind == gkDMG
   self.dmg.reset(rom)
 
+proc input*(self: Gameboy, input: InputKey, isPressed: bool) =
+  assert self.kind == gkDMG
+  self.dmg.joypad[DmgKeyInputMap[input]] = isPressed
+
 proc step*(self: Gameboy): bool =
   assert self.kind == gkDMG
   self.dmg.step()
 
-proc input*(self: Gameboy, input: InputKey, isPressed: bool) =
-  assert self.kind == gkDMG
-  self.dmg.joypad[DmgKeyInputMap[input]] = isPressed
+proc frame*(self: Gameboy) =
+  var
+    needsRedraw = false
+  while not needsRedraw:
+    needsRedraw = needsRedraw or self.step()
 
 
 proc save*(self: Gameboy): GameboyState =
