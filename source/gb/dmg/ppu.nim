@@ -54,6 +54,12 @@ Sources
 * `<https://www.reddit.com/r/EmuDev/comments/8uahbc/dmg_bgb_lcd_timings_and_cnt/e1iooum/>`_
 
 ]##
+#[
+
+TODO:
+  * variable length Mode3
+
+]#
 import
   gb/common/util, mem, interrupt
 
@@ -340,42 +346,44 @@ proc dmaTransfer(self: Ppu) =
     self.mcu[(OamStartAddress.uint16 + (self.state.dma and 0x00ff)).MemAddress] = self.mcu[self.state.dma]
     self.state.dma += 1
 
-proc step*(self: Ppu): bool {.discardable.} =
-  if not self.state.io.isEnabled:
-    return false
+proc step*(self: Ppu, cycles: int): bool {.discardable.} =
+  result = false
+  for i in 0..<cycles:
+    if not self.state.io.isEnabled:
+      return false
 
-  self.state.timer += 1
-  if self.state.timer >= 456:
-    self.nextLine()
+    self.state.timer += 1
+    if self.state.timer >= 456:
+      self.nextLine()
 
-  case self.state.io.ly
-  of 0..(Height-1):
-    case self.state.timer
-    of 0..79:
-      # mSearchingOam
-      self.state.io.mode = mSearchingOam
-    of 80:
-      # mDataTransfer: start
-      self.transferStart()
-    of 248:
-      # mHBlank
-      self.state.io.mode = mHBlank
+    case self.state.io.ly
+    of 0..(Height-1):
+      case self.state.timer
+      of 0..79:
+        # mSearchingOam
+        self.state.io.mode = mSearchingOam
+      of 80:
+        # mDataTransfer: start
+        self.transferStart()
+      of 248:
+        # mHBlank
+        self.state.io.mode = mHBlank
+      else:
+        discard
+    of 144:
+      # mVBlank: start
+      self.state.io.mode = mVBlank
+      self.mcu.raiseInterrupt(iVBlank)
+      self.state.currentWindowY = 0
+    of 154:
+      # mVBlank: end
+      self.state.io.ly = 0
+      result = true
     else:
       discard
-  of 144:
-    # mVBlank: start
-    self.state.io.mode = mVBlank
-    self.mcu.raiseInterrupt(iVBlank)
-    self.state.currentWindowY = 0
-  of 154:
-    # mVBlank: end
-    self.state.io.ly = 0
-    result = true
-  else:
-    discard
 
-  self.handleInterrupt()
-  self.dmaTransfer()
+    self.handleInterrupt()
+    self.dmaTransfer()
 
 
 proc setupMemHandler*(mcu: Mcu, self: Ppu) =
