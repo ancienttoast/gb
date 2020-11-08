@@ -2,7 +2,7 @@ import
   std/unittest,
   gb/gba/mem
 
-suite "GBA - mem":
+suite "unit.gba.mem: Memory Bus":
   test "read 8bit":
     var
       data = newSeq[uint8](16_384)

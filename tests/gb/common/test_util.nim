@@ -3,7 +3,7 @@ import
   gb/common/util
 
 
-suite "util":
+suite "unit.com.util":
   test "getBit - bit 0 = 0":
     check 0 == getBit(0b11111110, 0)
   

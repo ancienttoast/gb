@@ -12,7 +12,7 @@ proc initCpu(): Arm7tdmiState =
   result.cpsr = cast[ProgramStatusRegister](0x0000001f)
   result.mode = mSystem
 
-suite "ARM7TDMI - arm: branch instructions":
+suite "unit.gba.cpu: ARM7TDMI - arm: branch instructions":
   test "B +c0":
     var
       data = newSeq[uint8](33_554_432)
