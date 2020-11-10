@@ -172,32 +172,8 @@ type
 func isEnabled(self: PpuIoState): bool =
   self.lcdc.testBit(7)
 
-func windowMapAddress(self: PpuIoState): MemAddress =
-  WindowAddress[self.lcdc.testBit(6).int]
 
-func isWindowEnabled(self: PpuIoState): bool =
-  self.lcdc.testBit(5)
-
-func tileAddress(self: PpuIoState): MemAddress =
-  TileAddress[self.lcdc.testBit(4).int].MemAddress
-
-func bgMapAddress*(self: PpuIoState): MemAddress =
-  MapAddress[self.lcdc.testBit(3).int].MemAddress
-
-func spriteSize(self: PpuIoState): bool =
-  self.lcdc.testBit(2)
-
-func isObjEnabled(self: PpuIoState): bool =
-  self.lcdc.testBit(1)
-
-func isBgEnabled(self: PpuIoState): bool =
-  self.lcdc.testBit(0)
-
-
-func bgColorShade*(self: PpuIoState, colorNumber: range[0..3]): PpuGrayShade =
-  (self.bgp shl (6 - colorNumber*2) shr 6).PpuGrayShade
-
-func shade(gbPalette: uint8, colorNumber: range[0..3]): PpuGrayShade =
+func shade*(gbPalette: uint8, colorNumber: range[0..3]): PpuGrayShade =
   (gbPalette shl (6 - colorNumber*2) shr 6).PpuGrayShade
 
 
@@ -208,6 +184,13 @@ func `mode=`(self: var PpuIoState, mode: PpuMode) =
   self.stat = self.stat and 0b11111100
   self.stat = self.stat or mode.ord.uint8
 
+
+#[ Sprites ]#
+func isSpriteEnabled(self: PpuIoState): bool =
+  self.lcdc.testBit(1)
+
+func isUsingLargeSprite(self: PpuIoState): bool =
+  self.lcdc.testBit(2)
 
 func palette*(sprite: PpuSpriteAttribute): int =
   getBit(sprite.flags, 4).int
@@ -224,32 +207,58 @@ func priority*(sprite: PpuSpriteAttribute): bool =
 func isVisible(sprite: PpuSpriteAttribute): bool =
   not (sprite.x == 0 or sprite.x >= 168'u8 or sprite.y == 0 or sprite.y >= 168'u8)
 
-func tileAddress(sprite: PpuSpriteAttribute, isBig: bool): int =
+func tileAddress(sprite: PpuSpriteAttribute, isBig: bool): uint16 =
   var
-    tile = sprite.tile.int
+    tile = sprite.tile.uint16
   if isBig:
     tile = tile and 0b11111110
-  0x8000 + tile*16
+  0x8000'u16 + tile*16
 
 
-func tileAddress*(state: PpuState, tileNum: uint8): int =
-  if state.io.tileAddress().int == 0x8000:
-    state.io.tileAddress().int + tileNum.int*16
-  else:
-    0x9000 + (cast[int8](tileNum)).int*16
+#[ Window ]#
+func isWindowEnabled(self: PpuIoState): bool =
+  self.lcdc.testBit(5)
 
-iterator tileLine(state: PpuState, tileAddress: int, line: int, palette: uint8, start = 0, flipX = false): PpuGrayShade =
+func windowMapAddress(self: PpuIoState): MemAddress =
+  WindowAddress[self.lcdc.testBit(6).int]
+
+func isWindowOnLine(state: PpuState, y: int): bool =
+  state.io.wx.int <= 166 and state.io.wy.int <= 143 and
+  y >= state.io.wy.int
+
+
+#[ Background ]#
+func isBgEnabled(self: PpuIoState): bool =
+  self.lcdc.testBit(0)
+
+func bgMapAddress*(self: PpuIoState): MemAddress =
+  MapAddress[self.lcdc.testBit(3).int].MemAddress
+
+
+#[ Tile ]#
+func tileAddress(self: PpuIoState): MemAddress =
+  TileAddress[self.lcdc.testBit(4).int].MemAddress
+
+func tileAddress*(state: PpuState, tileNum: uint8): uint16 =
   let
-    baseAddress = (tileAddress - VramStartAddress) + (line*2)
+    base = state.io.tileAddress()
+  if base == 0x8000'u16:
+    base + tileNum.uint16*16
+  else:
+    0x9000 + (cast[int8](tileNum)).uint16*16
+
+iterator tileLine(state: PpuState, tileAddress: uint16, line: int, start = 0, flipX = false): uint8 =
+  let
+    baseAddress = (tileAddress.int - VramStartAddress) + (line*2)
     b0 = state.vram[baseAddress]
     b1 = state.vram[baseAddress + 1]
     (a, b) = if flipX: (start, 7) else: (7 - start, 0)
   for j in count(a, b):
     let
       c = (b1.getBit(j) shl 1) or b0.getBit(j)
-    yield palette.shade(c)
+    yield c
 
-iterator mapLine*(state: PpuState, x, y: int, width: int, mapAddress: int): tuple[x: int, shade: PpuGrayShade] =
+iterator mapLine*(state: PpuState, x, y: int, width: int, mapAddress: int): tuple[x: int, c: uint8, palette: uint8] =
   let
     tileY = (y div 8).wrap32
     startY = y mod 8
@@ -264,71 +273,71 @@ iterator mapLine*(state: PpuState, x, y: int, width: int, mapAddress: int): tupl
         tile = tileY*MapSize + tileX
         tileNum = state.vram[mapAddress + tile]
         tileAddress = state.tileAddress(tileNum)
-      for shade in state.tileLine(tileAddress, startY, state.io.bgp, startX):
-        yield (x: col, shade: shade)
+      for c in state.tileLine(tileAddress, startY, startX):
+        yield (x: col, c: c, palette: state.io.bgp)
         col += 1
         if col == width:
           break main
       tileX = (tileX + 1).wrap32
       startX = 0
 
-iterator objLine*(state: PpuState, x, y: int, width: int): tuple[x: int, shade: PpuGrayShade, priority: bool] =
+iterator objLine*(state: PpuState, x, y: int, width: int): tuple[x: int, c: uint8, palette: uint8, priority: bool] =
   var
     usedColumns: array[MapSize*8, bool]
+    j = 0
   for sprite in state.oam:
+    if j == 10:
+      break
     if not sprite.isVisible:
       continue
 
     let
       sx = sprite.x.int - 8
       sy = sprite.y.int - 16
-      height = if state.io.spriteSize: 16 else: 8
+      height = if state.io.isUsingLargeSprite: 16 else: 8
     if not(y in sy ..< sy+height)or sx+8 < x or sx >= x+width:
       continue
 
+    j += 1
     let
       f = max(x, sx)
       t = min(x+width, sx+8)
-      tileAddress = sprite.tileAddress(state.io.spriteSize)
+      tileAddress = sprite.tileAddress(state.io.isUsingLargeSprite)
     var
       line = height - 1 - (sy - y + (height - 1))
     if sprite.isYFlipped: line = height - 1 - line
-    var i = f
-    for shade in state.tileLine(tileAddress, line, state.io.obp[sprite.palette], f - sx, sprite.isXFlipped):
+    var
+      i = f
+    for c in state.tileLine(tileAddress, line, f - sx, sprite.isXFlipped):
       if not usedColumns[sprite.x.int]:
-        yield (x: i, shade: shade, priority: sprite.priority)
+        yield (x: i, c: c, palette: state.io.obp[sprite.palette], priority: sprite.priority)
       i += 1
       if i == t:
         break
     
     usedColumns[sprite.x.int] = true
 
-proc transferStart(self: Ppu) =
-  let
-    y = self.state.io.ly.int
-  self.state.io.mode = mDataTransfer
+proc transferLine(state: var PpuState, y: int, line: var array[Width, PpuGrayShade]) =
+  if state.io.isBgEnabled():
+    for x, c, palette in state.mapLine(state.io.scx.int, state.io.scy.int + y, Width, state.io.bgMapAddress().int - VramStartAddress):
+      line[x] = palette.shade(c)
 
-  if self.state.io.isBgEnabled():
-    for x, shade in self.state.mapLine(self.state.io.scx.int, self.state.io.scy.int + y, Width, self.state.io.bgMapAddress().int - VramStartAddress):
-      self.buffer[y][x] = shade
-
-  if self.state.io.isWindowEnabled() and self.state.io.wx.int <= 166 and self.state.io.wy.int <= 143:
+  if state.io.isWindowEnabled() and state.isWindowOnLine(y):
     let
-      wx = self.state.io.wx.int - 7
-    if y >= self.state.io.wy.int:
-      for x, shade in self.state.mapLine(0, self.state.currentWindowY, (Width - wx), self.state.io.windowMapAddress().int - VramStartAddress):
-        self.buffer[y][wx + x] = shade
-      self.state.currentWindowY += 1
+      wx = state.io.wx.int - 7
+    for x, c, palette in state.mapLine(0, state.currentWindowY, (Width - wx), state.io.windowMapAddress().int - VramStartAddress):
+      line[wx + x] = palette.shade(c)
+    state.currentWindowY += 1
 
-  if self.state.io.isObjEnabled():
-    for x, shade, priority in self.state.objLine(0, y, Width):
-      if (not priority or self.buffer[y][x] == gsWhite) and shade != gsWhite:
-        self.buffer[y][x] = shade
+  if state.io.isSpriteEnabled():
+    for x, c, palette, priority in state.objLine(0, y, Width):
+      if (not priority or line[x] == gsWhite) and c != 0:
+        line[x] = palette.shade(c)
 
-proc nextLine(self: Ppu) =
-  self.state.io.ly += 1
-  self.state.timer = 0
-  self.state.io.stat.toggleBit(2, self.state.io.ly == self.state.io.lyc)
+proc nextLine(state: var PpuState) =
+  state.io.ly += 1
+  state.timer = 0
+  state.io.stat.toggleBit(2, state.io.ly == state.io.lyc)
 
 proc handleInterrupt(self: Ppu) =
   let
@@ -347,26 +356,27 @@ proc dmaTransfer(self: Ppu) =
     self.state.dma += 1
 
 proc step*(self: Ppu, cycles: int): bool {.discardable.} =
+  if not self.state.io.isEnabled:
+    return false
+
   result = false
   for i in 0..<cycles:
-    if not self.state.io.isEnabled:
-      return false
-
     self.state.timer += 1
     if self.state.timer >= 456:
-      self.nextLine()
+      self.state.nextLine()
 
     case self.state.io.ly
     of 0..(Height-1):
       case self.state.timer
       of 0..79:
-        # mSearchingOam
         self.state.io.mode = mSearchingOam
       of 80:
         # mDataTransfer: start
-        self.transferStart()
+        self.state.io.mode = mDataTransfer
+        let
+          y = self.state.io.ly.int
+        self.state.transferLine(y, self.buffer[y])
       of 248:
-        # mHBlank
         self.state.io.mode = mHBlank
       else:
         discard

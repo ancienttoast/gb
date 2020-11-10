@@ -15,10 +15,10 @@ proc initPainter*(palette: Palette): DmgPainter =
     palette: palette
   )
 
-proc tile(self: DmgPainter, ppu: Ppu, tileAddress: int, gbPalette: uint8): Image[ColorRGBU] =
+proc tile(self: DmgPainter, ppu: Ppu, tileAddress: uint16, gbPalette: uint8): Image[ColorRGBU] =
   result = initImage[ColorRGBU](8, 8)
   let
-    baseAddress = tileAddress - VramStartAddress
+    baseAddress = tileAddress.int - VramStartAddress
   for i in 0..7:
     let
       b0 = ppu.state.vram[baseAddress + i*2]
@@ -30,7 +30,7 @@ proc tile(self: DmgPainter, ppu: Ppu, tileAddress: int, gbPalette: uint8): Image
         c.setBit(0)
       if b1.testBit(j):
         c.setBit(1)
-      result[7 - j, i] = self.palette[ppu.state.io.bgColorShade(c)]
+      result[7 - j, i] = self.palette[gbPalette.shade(c)]
 
 proc bgTile*(self: DmgPainter, ppu: Ppu, tileNum: int): Image[ColorRGBU] =
   let
@@ -51,8 +51,8 @@ proc renderBackground*(self: DmgPainter, ppu: Ppu, drawGrid = true): Image[Color
     h = MapSize*8
   result = initImage[ColorRGBU](w, h)
   for y in 0..<h:
-    for x, shade in mapLine(ppu.state, 0, y, w, ppu.state.io.bgMapAddress().int - VramStartAddress):
-      result[x, y] = self.palette[shade]
+    for x, c, palette in mapLine(ppu.state, 0, y, w, ppu.state.io.bgMapAddress().int - VramStartAddress):
+      result[x, y] = self.palette[palette.shade(c)]
   let
     min0 = [ ppu.state.io.scx.int, ppu.state.io.scy.int ]
     max0 = [ ppu.state.io.scx.int + 160, ppu.state.io.scy.int + 144 ]
@@ -68,8 +68,8 @@ proc renderBackground*(self: DmgPainter, ppu: Ppu, drawGrid = true): Image[Color
 proc renderSprites*(self: DmgPainter, ppu: Ppu): Image[ColorRGBU] =
   result = initImage[ColorRGBU](Width, Height)
   for y in 0..<Height:
-    for x, shade, priority in ppu.state.objLine(0, y, Width):
-      result[x, y] = self.palette[shade]
+    for x, c, palette, priority in ppu.state.objLine(0, y, Width):
+      result[x, y] = self.palette[palette.shade(c)]
 
 proc renderLcd*(self: DmgPainter, ppu: Ppu): Image[ColorRGBU] =
   result = initImage[ColorRGBU](Width, Height)
