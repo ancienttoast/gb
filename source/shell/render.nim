@@ -34,7 +34,7 @@ proc tile(self: DmgPainter, ppu: Ppu, tileAddress: uint16, gbPalette: uint8): Im
 
 proc bgTile*(self: DmgPainter, ppu: Ppu, tileNum: int): Image[ColorRGBU] =
   let
-    tilePos = ppu.state.tileAddress(tileNum.uint8)
+    tilePos = ppu.state.io.tileAddress(tileNum.uint8)
   self.tile(ppu, tilePos, ppu.state.io.bgp)
 
 proc renderTiles*(self: DmgPainter, ppu: Ppu, b: range[0..2]): Image[ColorRGBU] =
@@ -51,7 +51,7 @@ proc renderBackground*(self: DmgPainter, ppu: Ppu, drawGrid = true): Image[Color
     h = MapSize*8
   result = initImage[ColorRGBU](w, h)
   for y in 0..<h:
-    for x, c, palette in mapLine(ppu.state, 0, y, w, ppu.state.io.bgMapAddress().int - VramStartAddress):
+    for x, c, palette, priority in mapLine(ppu.state, 0, y, w, ppu.state.io.bgMapAddress().int - VramStartAddress):
       result[x, y] = self.palette[palette.shade(c)]
   let
     min0 = [ ppu.state.io.scx.int, ppu.state.io.scy.int ]

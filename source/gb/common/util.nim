@@ -123,8 +123,8 @@ func toggleBit*[T: uint8 | uint16](value: var T, bit: static[int], bitValue: boo
     value.clearBit(bit)
 
 
-iterator count*(a, b: int): int =
-  if a < b:
-    for i in a..b: yield i
+iterator count*[T](slice: Slice[T]): int =
+  if slice.a < slice.b:
+    for i in slice: yield i
   else:
-    for i in countdown(a, b): yield i
+    for i in countdown(slice.a, slice.b): yield i

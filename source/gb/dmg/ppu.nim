@@ -77,6 +77,8 @@ const
   MapSize* = 32
   TileAddress = [ 0x8800, 0x8000 ]
 
+  SpriteLineLimit = 10
+
 type
   PpuGrayShade* = enum
     gsWhite = 0
@@ -239,26 +241,32 @@ func bgMapAddress*(self: PpuIoState): MemAddress =
 func tileAddress(self: PpuIoState): MemAddress =
   TileAddress[self.lcdc.testBit(4).int].MemAddress
 
-func tileAddress*(state: PpuState, tileNum: uint8): uint16 =
+func tileAddress*(state: PpuIoState, tileNum: uint8): uint16 =
   let
-    base = state.io.tileAddress()
+    base = state.tileAddress()
   if base == 0x8000'u16:
     base + tileNum.uint16*16
   else:
     0x9000 + (cast[int8](tileNum)).uint16*16
 
-iterator tileLine(state: PpuState, tileAddress: uint16, line: int, start = 0, flipX = false): uint8 =
+iterator tileLine(vram: PpuVram, tileAddress: uint16, offsetY: int, offsetX = 0, flipX = false): uint8 =
   let
-    baseAddress = (tileAddress.int - VramStartAddress) + (line*2)
-    b0 = state.vram[baseAddress]
-    b1 = state.vram[baseAddress + 1]
-    (a, b) = if flipX: (start, 7) else: (7 - start, 0)
-  for j in count(a, b):
-    let
-      c = (b1.getBit(j) shl 1) or b0.getBit(j)
-    yield c
+    baseAddress = (tileAddress.int - VramStartAddress) + (offsetY*2)
+    b0 = vram[baseAddress]
+    b1 = vram[baseAddress + 1]
+    slice = if flipX: offsetX..7 else: 7-offsetX..0
+  for j in count(slice):
+    yield (b1.getBit(j) shl 1) or b0.getBit(j)
 
-iterator mapLine*(state: PpuState, x, y: int, width: int, mapAddress: int): tuple[x: int, c: uint8, palette: uint8] =
+
+type
+  Pixel = tuple
+    x: int
+    c: uint8
+    palette: uint8
+    priority: bool
+
+iterator mapLine*(state: PpuState, x, y: int, width: int, mapAddress: int): Pixel =
   let
     tileY = (y div 8).wrap32
     startY = y mod 8
@@ -272,21 +280,21 @@ iterator mapLine*(state: PpuState, x, y: int, width: int, mapAddress: int): tupl
       let
         tile = tileY*MapSize + tileX
         tileNum = state.vram[mapAddress + tile]
-        tileAddress = state.tileAddress(tileNum)
-      for c in state.tileLine(tileAddress, startY, startX):
-        yield (x: col, c: c, palette: state.io.bgp)
+        tileAddress = state.io.tileAddress(tileNum)
+      for c in state.vram.tileLine(tileAddress, startY, startX):
+        yield (x: col, c: c, palette: state.io.bgp, priority: false)
         col += 1
         if col == width:
           break main
       tileX = (tileX + 1).wrap32
       startX = 0
 
-iterator objLine*(state: PpuState, x, y: int, width: int): tuple[x: int, c: uint8, palette: uint8, priority: bool] =
+iterator objLine*(state: PpuState, x, y: int, width: int): Pixel =
   var
     usedColumns: array[MapSize*8, bool]
     j = 0
   for sprite in state.oam:
-    if j == 10:
+    if j == SpriteLineLimit:
       break
     if not sprite.isVisible:
       continue
@@ -295,7 +303,7 @@ iterator objLine*(state: PpuState, x, y: int, width: int): tuple[x: int, c: uint
       sx = sprite.x.int - 8
       sy = sprite.y.int - 16
       height = if state.io.isUsingLargeSprite: 16 else: 8
-    if not(y in sy ..< sy+height)or sx+8 < x or sx >= x+width:
+    if not(y in sy ..< sy+height) or sx+8 < x or sx >= x+width:
       continue
 
     j += 1
@@ -308,7 +316,7 @@ iterator objLine*(state: PpuState, x, y: int, width: int): tuple[x: int, c: uint
     if sprite.isYFlipped: line = height - 1 - line
     var
       i = f
-    for c in state.tileLine(tileAddress, line, f - sx, sprite.isXFlipped):
+    for c in state.vram.tileLine(tileAddress, line, f - sx, sprite.isXFlipped):
       if not usedColumns[sprite.x.int]:
         yield (x: i, c: c, palette: state.io.obp[sprite.palette], priority: sprite.priority)
       i += 1
@@ -319,13 +327,13 @@ iterator objLine*(state: PpuState, x, y: int, width: int): tuple[x: int, c: uint
 
 proc transferLine(state: var PpuState, y: int, line: var array[Width, PpuGrayShade]) =
   if state.io.isBgEnabled():
-    for x, c, palette in state.mapLine(state.io.scx.int, state.io.scy.int + y, Width, state.io.bgMapAddress().int - VramStartAddress):
+    for x, c, palette, priority in state.mapLine(state.io.scx.int, state.io.scy.int + y, Width, state.io.bgMapAddress().int - VramStartAddress):
       line[x] = palette.shade(c)
 
   if state.io.isWindowEnabled() and state.isWindowOnLine(y):
     let
       wx = state.io.wx.int - 7
-    for x, c, palette in state.mapLine(0, state.currentWindowY, (Width - wx), state.io.windowMapAddress().int - VramStartAddress):
+    for x, c, palette, priority in state.mapLine(0, state.currentWindowY, (Width - wx), state.io.windowMapAddress().int - VramStartAddress):
       line[wx + x] = palette.shade(c)
     state.currentWindowY += 1
 
