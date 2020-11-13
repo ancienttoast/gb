@@ -246,7 +246,9 @@ proc main*() =
     window = sdl2.createWindow("GameBoy", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1280, 720, SDL_WINDOW_RESIZABLE or SDL_WINDOW_OPENGL)
     glContext = window.glCreateContext()
   assert glContext != nil
-  discard glSetSwapInterval(0)
+  if glSetSwapInterval(-1) == -1:
+    # If adaptive vsync isn't supported try normal vsync
+    discard glSetSwapInterval(1)
 
   loadExtensions()
 
@@ -313,20 +315,23 @@ proc main*() =
       else:
         discard
 
-    let
-      dt = (getMonoTime() - start).inNanoseconds.int
-      speed = (16_666_666 / dt) * 100
-    speedBuffer &= ( if isRunning: speed else: 0 )
-    speedBuffer.delete(0)
-    start = getMonoTime()
+    var
+      frameCount = 0
     if isRunning:
       try:
-        gameboy.frame()
+        frameCount = gameboy.frame()
       except:
         echo getCurrentException().msg
         echo getStackTrace(getCurrentException())
         echo "cpu\t", gameboy.dmg.cpu.state
         isRunning = false
+    
+    let
+      dt = (getMonoTime() - start).inNanoseconds.int
+      speed = (frameCount*16_666_666 / dt) * 100
+    speedBuffer &= ( if isRunning: speed else: 0 )
+    speedBuffer.delete(0)
+    start = getMonoTime()
 
     igOpenGL3NewFrame()
     igImplSdl2NewFrame(window)

@@ -18,7 +18,7 @@ Models
 
 ]##
 import
-  std/times,
+  std/[times, monotimes],
   dmg/[dmg, joypad]
 
 
@@ -76,11 +76,20 @@ proc step*(self: Gameboy): bool =
   assert self.kind == gkDMG
   self.dmg.step()
 
-proc frame*(self: Gameboy) =
+proc frame*(self: Gameboy, frameLimit: Natural = 200, msLimit = 16): int =
+  let
+    frameLimit = if frameLimit == 0: 200 else: frameLimit
+    timeLimit = if msLimit == 0: initDuration(milliseconds = 16) else: initDuration(milliseconds = msLimit)
   var
-    needsRedraw = false
-  while not needsRedraw:
-    needsRedraw = needsRedraw or self.step()
+    count = 0
+    timer = getMonoTime()
+  while count < frameLimit and (getMonoTime() - timer) < timeLimit:
+    var
+      needsRedraw = false
+    while not needsRedraw:
+      needsRedraw = needsRedraw or self.step()
+    count += 1
+  count
 
 
 proc save*(self: Gameboy): GameboyState =
