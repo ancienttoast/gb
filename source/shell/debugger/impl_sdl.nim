@@ -198,17 +198,17 @@ bool ImGui_ImplSDL2_InitForMetal(SDL_Window* window)
 ]#
 
 proc igSdl2Shutdown*() =
-    g_Window = nil
+  g_Window = nil
 
-    # Destroy last known clipboard data
-    if g_ClipboardTextData != nil:
-      freeClipboardText(g_ClipboardTextData)
-    g_ClipboardTextData = nil
+  # Destroy last known clipboard data
+  if g_ClipboardTextData != nil:
+    freeClipboardText(g_ClipboardTextData)
+  g_ClipboardTextData = nil
 
-    # Destroy SDL mouse cursors
-    for cursor in g_MouseCursors.mitems:
-      freeCursor(cursor)
-      cursor = nil
+  # Destroy SDL mouse cursors
+  for cursor in g_MouseCursors.mitems:
+    freeCursor(cursor)
+    cursor = nil
 
 
 proc igImplSdl2UpdateMousePosAndButtons() =
