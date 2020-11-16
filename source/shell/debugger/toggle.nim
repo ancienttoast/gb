@@ -9,9 +9,6 @@ converter imGuiItemFlagsToInt32(value: ImGuiItemFlags): int32 =
 template `+`(a, b: ImVec2): ImVec2 =
   ImVec2(x: a.x + b.x, y: a.y + b.y)
 
-template `-`(a, b: ImVec2): ImVec2 =
-  ImVec2(x: a.x - b.x, y: a.y - b.y)
-
 
 func igToggleButton*(label: cstring, v: var bool) =
   let

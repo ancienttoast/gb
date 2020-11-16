@@ -1,5 +1,5 @@
 import
-  std/[strformat, times, monotimes, options, streams],
+  std/[strformat, times, monotimes, options],
   opengl, nimgl/imgui, sdl2, impl_sdl, impl_opengl,
   imageman,
   style, gb/gameboy, gb/dmg/[cpu, mem, ppu], shell/render
