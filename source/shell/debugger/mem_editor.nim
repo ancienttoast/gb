@@ -12,7 +12,7 @@
 # TODO: better resizing policy (ImGui doesn't have flexible window resizing constraints yet)
 # From: https://gist.github.com/cmaughan/ce1bfcee3f9947939253
 import
-  std/[strscans, strformat],
+  std/[strscans, strformat, streams],
   nimgl/imgui
 
 type
@@ -38,6 +38,25 @@ proc newMemoryEditor*(): MemoryEditor =
     addrInput: newString(32),
     allowEdits: true
   )
+
+proc saveDump(data_provider: DataProviderProc, mem_size: int) =
+  let
+    s = newFileStream("memdump.txt", fmWrite)
+  var
+    i = 0
+  for address in 0..<mem_size:
+    if i == 0:
+      s.write(&"{address:#06x}\t")
+    s.write(&"{data_provider(address):02x}")
+    i += 1
+    if i == 8:
+      s.write("\t")
+    else:
+      s.write(" ")
+    if i == 16:
+      s.write("\n")
+      i = 0
+  s.close()
 
 proc get_cursor_pos(data: ptr ImGuiInputTextCallbackData): int32 {.cdecl.} =
   var
@@ -238,4 +257,7 @@ proc draw*(self: MemoryEditor, title: string, data_provider: DataProviderProc, d
           self.dataEditingAddr = goto_addr
           self.dataEditingTakeFocus = true
     igPopItemWidth()
+    igSameLine(igGetWindowWidth() - 60)
+    if igButton("Dump"):
+      saveDump(data_provider, mem_size)
   igEnd()

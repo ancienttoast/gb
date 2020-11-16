@@ -76,6 +76,12 @@ proc step*(self: Gameboy): bool =
   assert self.kind == gkDMG
   self.dmg.step()
 
+proc stepFrame*(self: Gameboy) =
+  var
+    needsRedraw = false
+  while not needsRedraw:
+    needsRedraw = needsRedraw or self.step()
+
 proc frame*(self: Gameboy, frameLimit: Natural = 200, msLimit = 16): int =
   let
     frameLimit = if frameLimit == 0: 200 else: frameLimit
@@ -84,13 +90,9 @@ proc frame*(self: Gameboy, frameLimit: Natural = 200, msLimit = 16): int =
     count = 0
     timer = getMonoTime()
   while count < frameLimit and (getMonoTime() - timer) < timeLimit:
-    var
-      needsRedraw = false
-    while not needsRedraw:
-      needsRedraw = needsRedraw or self.step()
+    self.stepFrame()
     count += 1
   count
-
 
 proc save*(self: Gameboy): GameboyState =
   assert self.kind == gkDMG

@@ -4,7 +4,7 @@ import
   imageman,
   style, gb/gameboy, gb/dmg/[cpu, mem, ppu], shell/render
 import
-  mem_editor, file_popup
+  mem_editor, file_popup, toggle
 
 when defined(profiler):
   import nimprof
@@ -112,7 +112,7 @@ proc draw(editor: MemoryEditor, gameboy: Gameboy) =
     setter = proc(address: int, value: uint8) = gameboy.dmg.mcu[address.uint16] = value
   igSetNextWindowPos(ImVec2(x: 162, y: 348), FirstUseEver)
   igSetNextWindowSize(ImVec2(x: 557, y: 300), FirstUseEver)
-  editor.draw("Memory editor", provider, setter, 0xffff)
+  editor.draw("Memory editor", provider, setter, 0x10000)
 
 
 type
@@ -274,6 +274,7 @@ proc main*() =
     filePopup = initFilePopup("Open file")
     states: array[10, Option[GameboyState]]
     painter = initPainter(PaletteDefault)
+    frameskip = 0
 
   gameboy.load(readFile(Rom))
 
@@ -319,7 +320,7 @@ proc main*() =
       frameCount = 0
     if isRunning:
       try:
-        frameCount = gameboy.frame()
+        frameCount = gameboy.frame(frameskip)
       except:
         echo getCurrentException().msg
         echo getStackTrace(getCurrentException())
@@ -378,16 +379,23 @@ proc main*() =
       igOpenPopup("Options")
     if igBeginPopupModal("Options", addr showOptions, ImGuiWindowFlags.AlwaysAutoResize):
       if igBeginTabBar("options"):
+        if igBeginTabItem("General"):
+          if igBeginCombo("Frameskip", if frameskip == 0: "Unlimited" else: $(frameskip - 1)):
+            for c in 0..10:
+              let
+                isSelected = c == frameskip
+              if igSelectable(if c == 0: "Unlimited" else: $(c - 1), isSelected):
+                frameskip = c
+              if isSelected:
+                igSetItemDefaultFocus()
+            igEndCombo()
+          igEndTabItem()
         if igBeginTabItem("Rendering"):
           igText("DMG Palette color")
           igColorEdit3("White", painter.palette[gsWhite])
           igColorEdit3("Light Gray", painter.palette[gsLightGray])
           igColorEdit3("Dark Gray", painter.palette[gsDarkGray])
           igColorEdit3("Black", painter.palette[gsBlack])
-          # TODO
-          if igButton("Load"): discard
-          igSameLine()
-          if igButton("Save"): discard
           igEndTabItem()
         igEndTabBar()
       igEndPopup()
@@ -420,43 +428,21 @@ proc main*() =
       igSetNextWindowSize(ImVec2(x: 152, y: 225), FirstUseEver)
       if igBegin("Controls"):
         if igButton("Reset"):
-          gameboy = newGameboy(if BootRom == "": "" else: readFile(BootRom))
           gameboy.load(readFile(Rom))
 
         igSeparator()
 
-        if igButton("Play"):
-          isRunning = true
-
-        if igButton("Pause"):
-          isRunning = false
-
-        if igButton("Step"):
+        igToggleButton("is_running", isRunning)
+        igPushButtonRepeat(true)
+        igSameLine()
+        if igButtonArrow("##step", ImGuiDir.Right):
           isRunning = false
           discard gameboy.step()
-
-        igCheckbox("Is running", addr isRunning)
-
-        igSeparator()
-
-        if igButton("Dump memory"):
-          let
-            s = newFileStream("memdump.txt", fmWrite)
-          var
-            i = 0
-          for address in 0..0xffff:
-            if i == 0:
-              s.write(&"{address:#06x}\t")
-            s.write(&"{gameboy.dmg.mcu[address.MemAddress]:02x}")
-            i += 1
-            if i == 8:
-              s.write("\t")
-            else:
-              s.write(" ")
-            if i == 16:
-              s.write("\n")
-              i = 0
-          s.close()
+        igSameLine()
+        if igButtonArrow("##step_frame", ImGuiDir.Right):
+          isRunning = false
+          gameboy.stepFrame()
+        igPopButtonRepeat()
 
         igSeparator()
         igPlotLines("Speed", addr speedBuffer[0], speedBuffer.len.int32,
