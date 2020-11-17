@@ -148,12 +148,6 @@ func signExtend*[T](x: T, bits: static[int]): T =
 
 
 
-func extract*[T: uint16 | uint32](value: T, a, b: static[int]): T =
-  const
-    bits = a..b
-    Mask = (2^bits.len - 1).T
-  (value shr bits.a) and Mask
-
 func rotateLeft*[T: uint16 | uint32](x: T, n: uint): T =
   # Based on: https://blog.regehr.org/archives/1063
   (x shl n) or (x shr (32 - n))
