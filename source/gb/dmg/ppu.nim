@@ -164,10 +164,10 @@ type
     stateIR: bool
     dma: uint16
     currentWindowY: int
+    buffer: array[Height, array[Width, PpuGrayShade]]
 
   Ppu* = ref object
     state*: PpuState
-    buffer*: array[Height, array[Width, PpuGrayShade]]
     mcu: Mcu
 
 
@@ -383,7 +383,7 @@ proc step*(self: Ppu, cycles: int): bool {.discardable.} =
         self.state.io.mode = mDataTransfer
         let
           y = self.state.io.ly.int
-        self.state.transferLine(y, self.buffer[y])
+        self.state.transferLine(y, self.state.buffer[y])
       of 248:
         self.state.io.mode = mHBlank
       else:

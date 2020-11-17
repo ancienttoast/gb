@@ -75,7 +75,7 @@ proc renderLcd*(self: DmgPainter, ppu: Ppu): Image[ColorRGBU] =
   result = initImage[ColorRGBU](Width, Height)
   for y in 0..<Height:
     for x in 0..<Width:
-      result[x, y] = self.palette[ppu.buffer[y][x]]
+      result[x, y] = self.palette[ppu.state.buffer[y][x]]
 
 
 const

@@ -2,7 +2,7 @@ import
   std/[strformat, times, monotimes, options],
   opengl, nimgl/imgui, sdl2, impl_sdl, impl_opengl,
   imageman,
-  style, gb/gameboy, gb/dmg/[cpu, mem, ppu], shell/render
+  style, gb/[gameboy, rewind], gb/dmg/[cpu, mem, ppu], shell/render
 import
   mem_editor, file_popup, toggle
 
@@ -15,7 +15,6 @@ const
   BootRom = ""
   Rom = "123/games/gb/Super Mario Land 2 - 6 Golden Coins (USA, Europe) (Rev B).gb"
   #Rom = "123/dmg-acid2.gb"
-
 
 
 type
@@ -239,6 +238,19 @@ proc destroy(self: PpuWindow) =
     destroy texture
 
 
+proc displayBytes(bytes: int): string =
+  const
+    Divider = 1000
+    Units = [ "B", "kB", "MB", "GB", "TB" ]
+  var
+    current = bytes.float
+  for unit in Units:
+    if current <= Divider:
+      result = &"{current:6.2f}{unit}"
+      break
+    current = current / Divider
+
+
 
 proc main*() =
   sdl2.init(INIT_VIDEO or INIT_AUDIO)
@@ -261,6 +273,7 @@ proc main*() =
   var
     speedBuffer = newSeq[float32](30)
     gameboy = newGameboy(if BootRom == "": "" else: readFile(BootRom))
+    history = newHistory()
     isOpen = true
     isRunning = true
     showPpu = true
@@ -326,6 +339,7 @@ proc main*() =
         echo getStackTrace(getCurrentException())
         echo "cpu\t", gameboy.dmg.cpu.state
         isRunning = false
+      history.advance(gameboy)
     
     let
       dt = (getMonoTime() - start).inNanoseconds.int
@@ -429,9 +443,8 @@ proc main*() =
       if igBegin("Controls"):
         if igButton("Reset"):
           gameboy.load(readFile(Rom))
-
-        igSeparator()
-
+          history.clear()
+        igSameLine()
         igToggleButton("is_running", isRunning)
         igPushButtonRepeat(true)
         igSameLine()
@@ -442,9 +455,19 @@ proc main*() =
         if igButtonArrow("##step_frame", ImGuiDir.Right):
           isRunning = false
           gameboy.stepFrame()
+          history.advance(gameboy)
         igPopButtonRepeat()
 
+        igPushItemWidth(-1)
+        var
+          i = history.index.int32
+        if igSliderInt("##history", addr i, 0, history.len.int32, "%d"):
+          history.restore(gameboy, i.int)
+        igTextDisabled(&"{displayBytes(history.sizeInBytes())}")
+        igPushItemWidth(0)
+
         igSeparator()
+
         igPlotLines("Speed", addr speedBuffer[0], speedBuffer.len.int32,
           overlay_text = &"{speedBuffer[speedBuffer.high]:6.2f}%",
           scale_min = 0, scale_max = 1000,
