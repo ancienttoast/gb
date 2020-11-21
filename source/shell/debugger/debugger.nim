@@ -441,37 +441,43 @@ proc main*() =
       igSetNextWindowPos(ImVec2(x: 5, y: 25), FirstUseEver)
       igSetNextWindowSize(ImVec2(x: 152, y: 225), FirstUseEver)
       if igBegin("Controls"):
-        if igButton("Reset"):
-          gameboy.load(readFile(Rom))
-          history.clear()
-        igSameLine()
-        igToggleButton("is_running", isRunning)
-        igPushButtonRepeat(true)
-        igSameLine()
-        if igButtonArrow("##step", ImGuiDir.Right):
-          isRunning = false
-          discard gameboy.step()
-        igSameLine()
-        if igButtonArrow("##step_frame", ImGuiDir.Right):
-          isRunning = false
-          gameboy.stepFrame()
-          history.advance(gameboy)
-        igPopButtonRepeat()
+        if igBeginTabBar("options"):
+          if igBeginTabItem("General"):
+            if igButton("Reset"):
+              gameboy.load(readFile(Rom))
+              history.clear()
+            igSameLine()
+            igToggleButton("is_running", isRunning)
+            igPushButtonRepeat(true)
+            igSameLine()
+            if igButtonArrow("##step", ImGuiDir.Right):
+              isRunning = false
+              discard gameboy.step()
+            igSameLine()
+            if igButtonArrow("##step_frame", ImGuiDir.Right):
+              isRunning = false
+              gameboy.stepFrame()
+              history.advance(gameboy)
+            igPopButtonRepeat()
 
-        igPushItemWidth(-1)
-        var
-          i = history.index.int32
-        if igSliderInt("##history", addr i, 0, history.len.int32, "%d"):
-          history.restore(gameboy, i.int)
-        igTextDisabled(&"{displayBytes(history.sizeInBytes())}")
-        igPushItemWidth(0)
+            igSameLine(igGetWindowWidth() - 100)
+            igTextDisabled(&"{displayBytes(history.sizeInBytes())}")
 
-        igSeparator()
+            igPushItemWidth(-1)
+            var
+              i = history.index.int32
+            if igSliderInt("##history", addr i, 0, history.len.int32, "%d"):
+              history.restore(gameboy, i.int)
+            igPushItemWidth(0)
+            igEndTabItem()
 
-        igPlotLines("Speed", addr speedBuffer[0], speedBuffer.len.int32,
-          overlay_text = &"{speedBuffer[speedBuffer.high]:6.2f}%",
-          scale_min = 0, scale_max = 1000,
-          graph_size = ImVec2(x: 0, y: 40))
+          if igBeginTabItem("Speed"):
+            igPlotLines("Speed", addr speedBuffer[0], speedBuffer.len.int32,
+              overlay_text = &"{speedBuffer[speedBuffer.high]:6.2f}%",
+              scale_min = 0, scale_max = 1000,
+              graph_size = ImVec2(x: 0, y: 40))
+            igEndTabItem()
+        igEndTabBar()
       igEnd()
 
     showDemoWindow(showDemo)
