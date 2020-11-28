@@ -15,6 +15,7 @@ template `-=`*[T](self: var set[T], other: set[T]) =
   self = self - other
 
 proc `?=`*[T](self: var set[T], value: tuple[doInclude: bool, other: set[T]]) =
+  ## Adds the contents of `other` to `self` if `doInclude`is true.
   if value.doInclude:
     self +=  value.other
   else:
@@ -80,6 +81,10 @@ else:
 export testBit, setBit
 
 func setBit*[T: uint8 | uint16 | int](value: var T, bit: static[int]) =
+  ## Sets `bit` in `value` to 1.
+  ## 
+  ## The mask to achieve this is computed at compile time so at runtime it
+  ## should only be a sinple `or`.
   const
     Mask = 1.T shl bit
   value = value or Mask
@@ -88,24 +93,41 @@ func getBit*[T: uint8 | uint16 | int](value: T, bit: int): T =
   (value shr bit) and 0b00000001
 
 func clearBit*[T: uint8 | uint16 | uint32 | int](value: var T, bit: static[int]) =
+  ## Sets `bit` in `value` to 0.
+  ## 
+  ## The mask to achieve this is computed at compile time so at runtime it
+  ## should only be a sinple `or`.
   const
     Mask = 1.T shl bit
   value = value and not Mask
 
 func testBit*[T: uint8 | uint16 | int](value: T, bit: static[int]): bool =
+  ## Returns the value of `bit` as a boolean.
   const
     Mask = 1.T shl bit
   (value and Mask) == Mask
 
 func setBits*[T: uint8 | uint16](bits: Slice[int]): T =
+  ## Sets every bit in `bits` to 1.
   for b in bits:
     result = result or (1.T shl b.T)
 
 func toggleBit*[T: uint8 | uint16](value: var T, bit: static[int], bitValue: bool) =
+  ## Sets `bit` to `bitValue`.
   if bitValue:
     value.setBit(bit)
   else:
     value.clearBit(bit)
+
+func extract*[T: uint8 | uint16 | uint32](value: T, a, b: static[int]): T =
+  ## Extracts bits between `a` and `b`. `a` has to be equal or smaller then `b`.
+  static:
+    assert a <= b
+  const
+    bits = a..b
+    Mask = (2^bits.len - 1).T
+  (value shr bits.a) and Mask
+
 
 
 iterator count*[T](slice: Slice[T]): int =
@@ -113,10 +135,3 @@ iterator count*[T](slice: Slice[T]): int =
     for i in slice: yield i
   else:
     for i in countdown(slice.a, slice.b): yield i
-
-
-func extract*[T: uint8 | uint16 | uint32](value: T, a, b: static[int]): T =
-  const
-    bits = a..b
-    Mask = (2^bits.len - 1).T
-  (value shr bits.a) and Mask
