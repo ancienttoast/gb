@@ -1,5 +1,5 @@
 import
-  mem, cpu, apu, timer, ppu, cartridge, joypad
+  mem, cpu, apu, timer, ppu, mbc, joypad
 
 
 

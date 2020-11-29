@@ -1,5 +1,5 @@
 import
-  gb/dmg/[mem, cpu, apu, timer, ppu, cartridge, joypad]
+  gb/dmg/[mem, cpu, apu, timer, ppu, mbc, joypad]
 
 
 

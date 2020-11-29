@@ -1,6 +1,6 @@
 ##[
 
-Cartridges and Memory Bank Controllers
+Memory Bank Controllers
 ======================================
 
 Memory map
