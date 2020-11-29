@@ -118,7 +118,7 @@ proc reset*(self: Dmg, rom = "") =
 
 proc step*(self: Dmg): bool =
   let
-    cycles = self.cpu.step(self.mcu)
+    cycles = self.cpu.step(self.mcu) * 4
   self.cart.step(cycles)
   self.timer.step(cycles)
   self.apu.step(cycles)
