@@ -7,12 +7,10 @@ import
 
 
 const
-  BootRom = ""
   Rom = staticRead("../tests/rom/blargg/cpu_instrs/cpu_instrs.gb")
 
 proc init(): Gameboy =
-  result = newGameboy(BootRom)
-  result.load(Rom)
+  result = newGameboy(Rom)
 
 proc frame(gameboy: Gameboy, isRunning: var bool): Image[ColorRGBU] =
   try:

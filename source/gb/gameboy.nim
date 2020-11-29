@@ -19,7 +19,9 @@ Models
 ]##
 import
   std/[times, monotimes],
-  dmg/[dmg, joypad]
+  common/cart,
+  dmg/[dmg, joypad],
+  cgb/cgb
 
 
 
@@ -47,13 +49,15 @@ type
     gkMGB,
     gkSGB,
     gkSGB2,
-    gkCGH
+    gkCGB
 
   GameboyState* = object
     time*: DateTime
     case kind: GameboyKind
     of gkDMG:
       dmgState: DmgState
+    of gkCGB:
+      cgbState: CgbState
     else:
       discard
 
@@ -61,28 +65,70 @@ type
     case kind*: GameboyKind
     of gkDMG:
       dmg*: Dmg
+    of gkCGB:
+      cgb*: Cgb
     else:
       discard
 
-proc load*(self: Gameboy, rom = "") =
-  assert self.kind == gkDMG
-  self.dmg.reset(rom)
-
 proc input*(self: Gameboy, input: InputKey, isPressed: bool) =
-  assert self.kind == gkDMG
-  self.dmg.joypad[DmgKeyInputMap[input]] = isPressed
+  assert self.kind in {gkDMG, gkCGB}
+  case self.kind
+  of gkDMG:
+    self.dmg.joypad[DmgKeyInputMap[input]] = isPressed
+  of gkCGB:
+    self.cgb.joypad[DmgKeyInputMap[input]] = isPressed
+  else:
+    discard
+
+proc save*(self: Gameboy): GameboyState =
+  assert self.kind in {gkDMG, gkCGB}
+  result = GameboyState(
+    time: now(),
+    kind: self.kind
+  )
+  case self.kind
+  of gkDMG:
+    result.dmgState = self.dmg.save()
+  of gkCGB:
+    result.cgbState = self.cgb.save()
+  else:
+    discard
+
+proc load*(self: Gameboy, state: GameboyState) =
+  assert self.kind in {gkDMG, gkCGB}
+  assert self.kind == state.kind
+  case self.kind
+  of gkDMG:
+    self.dmg.load(state.dmgState)
+  of gkCGB:
+    self.cgb.load(state.cgbState)
+  else:
+    discard
 
 proc step*(self: Gameboy): bool =
-  assert self.kind == gkDMG
-  self.dmg.step()
+  ## Advance the device by a single cpu instruction.
+  assert self.kind in {gkDMG, gkCGB}
+  case self.kind
+  of gkDMG:
+    result = self.dmg.step()
+  of gkCGB:
+    result = self.cgb.step()
+  else:
+    discard
 
 proc stepFrame*(self: Gameboy) =
+  ## Advance the device by a signle frame.
   var
     needsRedraw = false
   while not needsRedraw:
     needsRedraw = needsRedraw or self.step()
 
 proc frame*(self: Gameboy, frameLimit: Natural = 200, msLimit = 16): int =
+  ## Advance the device by multiple frames. This will run for at most `msLimit` milliseconds or the
+  ## number of frames specified in `frameLimit`, whichever happens first.
+  ##
+  ## If `frameLimit` is 0 200 will be used instead.
+  ## If `msLimit`is 0 16 will be used
   let
     frameLimit = if frameLimit == 0: 200 else: frameLimit
     timeLimit = if msLimit == 0: initDuration(milliseconds = 16) else: initDuration(milliseconds = msLimit)
@@ -94,19 +140,19 @@ proc frame*(self: Gameboy, frameLimit: Natural = 200, msLimit = 16): int =
     count += 1
   count
 
-proc save*(self: Gameboy): GameboyState =
-  assert self.kind == gkDMG
-  result.time = now()
-  result.dmgState = self.dmg.save()
 
-proc load*(self: Gameboy, state: GameboyState) =
-  assert self.kind == gkDMG
-  assert state.kind == gkDMG
-  self.dmg.load(state.dmgState)
-
-
-proc newGameboy*(bootRom = ""): Gameboy =
-  Gameboy(
-    kind: gkDMG,
-    dmg: newDmg(bootRom)
-  )
+proc newGameboy*(rom: string, bootRom = ""): Gameboy =
+  let
+    cart = readCartHeader(rom)
+  if cart.isCgbOnly:
+    result = Gameboy(
+        kind: gkCGB,
+        cgb: newCgb(bootRom)
+      )
+    result.cgb.reset(rom)
+  else:
+    result = Gameboy(
+        kind: gkDMG,
+        dmg: newDmg(bootRom)
+      )
+    result.dmg.reset(rom)

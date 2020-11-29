@@ -1,3 +1,14 @@
+##[
+
+Cartridges
+==========
+
+Sources
+-------
+
+* `<https://gbdev.io/pandocs/#the-cartridge-header>`_
+
+]##
 import
   std/streams
 
@@ -62,6 +73,8 @@ type
     title:          array[11, char]   ## 0x0134  Title
     manufacturer:   array[4, char]    ## 0x013f  Manufacturer Code
     cgb:            uint8             ## 0x0143  CGB Flag
+                                      ##   0x80 - Game supports CGB functions, but works on old gameboys also.
+                                      ##   0xc0 - Game works on CGB only (physically the same as 0x80).
     newLicensee:    array[2, char]    ## 0x0144  New Licensee Code
     sgb:            uint8             ## 0x0146  SGB Flag
     kind:           CartridgeType     ## 0x0147  Cartridge Type
@@ -94,5 +107,5 @@ proc readCartHeader*(data: string): CartHeader =
   stream.close()
   assert read == sizeof(CartHeader)
 
-func isCgb*(self: CartHeader): bool =
-  self.cgb == 0x80 or self.cgb == 0xc0
+func isCgbOnly*(self: CartHeader): bool =
+  self.cgb == 0xc0

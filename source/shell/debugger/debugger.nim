@@ -366,7 +366,7 @@ func apuDebuggerWindow(isOpen: var bool, gameboy: Gameboy) =
 
   igEnd()
 
-proc controlsWindow(isOpen: var bool, history: History, gameboy: Gameboy, isRunning: var bool, speedBuffer: var seq[float32]) =
+proc controlsWindow(isOpen: var bool, history: History, gameboy: var Gameboy, isRunning: var bool, speedBuffer: var seq[float32]) =
   assert gameboy.kind == gkDMG
   if not isOpen:
     return
@@ -376,7 +376,7 @@ proc controlsWindow(isOpen: var bool, history: History, gameboy: Gameboy, isRunn
     if igBeginTabBar("options"):
       if igBeginTabItem("General"):
         if igButton("Reset"):
-          gameboy.load(readFile(Rom))
+          gameboy = newGameboy(readFile(Rom), if BootRom == "": "" else: readFile(BootRom))
           history.clear()
         igSameLine()
         igToggleButton("is_running", isRunning)
@@ -444,7 +444,7 @@ proc main*() =
 
   var
     speedBuffer = newSeq[float32](30)
-    gameboy = newGameboy(if BootRom == "": "" else: readFile(BootRom))
+    gameboy = newGameboy(readFile(Rom), if BootRom == "": "" else: readFile(BootRom))
     history = newHistory()
     isOpen = true
     isRunning = true
@@ -461,8 +461,6 @@ proc main*() =
     states: array[10, Option[GameboyState]]
     painter = initPainter(PaletteDefault)
     frameskip = 0
-
-  gameboy.load(readFile(Rom))
 
   var
     start = getMonoTime()
@@ -492,8 +490,7 @@ proc main*() =
         let
           d = cast[DropEventPtr](addr event)
         if d.kind == DropFile:
-          gameboy = newGameboy(if BootRom == "": "" else: readFile(BootRom))
-          gameboy.load(readFile($d.file))
+          gameboy = newGameboy(readFile($d.file), if BootRom == "": "" else: readFile(BootRom))
           isRunning = true
           freeClipboardText(d.file)
       else:
@@ -606,7 +603,7 @@ proc main*() =
     var
       path: string
     if filePopup.render(path):
-      gameboy.load(readFile(path))
+      gameboy = newGameboy(readFile(Rom), if BootRom == "": "" else: readFile(BootRom))
       isRunning = true
 
     showDemoWindow(showDemo)
