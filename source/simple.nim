@@ -16,10 +16,7 @@ proc init(): Gameboy =
 
 proc frame(gameboy: Gameboy, isRunning: var bool): Image[ColorRGBU] =
   try:
-    var
-      needsRedraw = false
-    while not needsRedraw:
-      needsRedraw = needsRedraw or gameboy.step()
+    discard gameboy.frame(0)
   except:
     isRunning = false
 
