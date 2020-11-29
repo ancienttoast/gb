@@ -1,8 +1,8 @@
 import
   std/[strformat, times, monotimes, options],
-  opengl, nimgl/imgui, sdl2, impl_sdl, impl_opengl,
+  opengl, nimgl/imgui, sdl2, sdl2/audio, impl_sdl, impl_opengl,
   imageman,
-  style, gb/[gameboy, rewind], gb/dmg/[cpu, mem, ppu], shell/render
+  style, gb/[gameboy, rewind], gb/dmg/[cpu, mem, ppu, apu], shell/render
 import
   mem_editor, file_popup, toggle
 
@@ -115,13 +115,13 @@ proc draw(editor: MemoryEditor, gameboy: Gameboy) =
 
 
 type
-  PpuWindow = ref object
+  PpuWindow = object
     bgTexture: Texture
     tileMapTextures: array[3, Texture]
     spriteTexture: Texture
     oamTextures: array[40, Texture]
 
-proc draw(self: PpuWindow, isOpen: var bool, gameboy: Gameboy) =
+proc draw(self: var PpuWindow, isOpen: var bool, gameboy: Gameboy) =
   assert gameboy.kind == gkDMG
   if not isOpen:
     return
@@ -221,14 +221,6 @@ proc draw(self: PpuWindow, isOpen: var bool, gameboy: Gameboy) =
       igEndTabBar()
   igEnd()
 
-proc initPpuWindow(): PpuWindow =
-  result = PpuWindow()
-  result.bgTexture = initTexture()
-  result.tileMapTextures = [initTexture(), initTexture(), initTexture()]
-  result.spriteTexture = initTexture()
-  for texture in result.oamTextures.mitems:
-    texture = initTexture()
-
 proc destroy(self: PpuWindow) =
   destroy self.bgTexture
   for texture in self.tileMapTextures:
@@ -237,8 +229,16 @@ proc destroy(self: PpuWindow) =
   for texture in self.oamTextures:
     destroy texture
 
+proc initPpuWindow(): PpuWindow =
+  result = PpuWindow()
+  result.bgTexture = initTexture()
+  result.tileMapTextures = [initTexture(), initTexture(), initTexture()]
+  result.spriteTexture = initTexture()
+  for texture in result.oamTextures.mitems:
+    texture = initTexture()
 
-proc displayBytes(bytes: int): string =
+
+func displayBytes(bytes: int): string =
   const
     Divider = 1000
     Units = [ "B", "kB", "MB", "GB", "TB" ]
@@ -250,6 +250,167 @@ proc displayBytes(bytes: int): string =
       break
     current = current / Divider
 
+template rawDataTooltip(body: untyped): untyped =
+  igTextDisabled("(raw)")
+  if igIsItemHovered():
+    igBeginTooltip()
+    igPushTextWrapPos(igGetFontSize() * 35.0)
+    body
+    igPopTextWrapPos()
+    igEndTooltip()
+
+func apuDebuggerWindow(isOpen: var bool, gameboy: Gameboy) =
+  assert gameboy.kind == gkDMG
+  if not isOpen:
+    return
+  #igSetNextWindowPos(ImVec2(x: 483, y: 25), FirstUseEver)
+  #igSetNextWindowSize(ImVec2(x: 236, y: 318), FirstUseEver)
+  if igBegin("APU", addr isOpen):
+    let
+      state = gameboy.dmg.apu.state
+
+    if igCollapsingHeader("General"):
+      rawDataTooltip:
+        igText("channelCtrl    ")
+        igSameLine()
+        igTextDisabled(&"0b{state.io.channelCtrl:08b}")
+        igText("selectionCtrl  ")
+        igSameLine()
+        igTextDisabled(&"0b{state.io.selectionCtrl:08b}")
+        igText("soundCtrl      ")
+        igSameLine()
+        igTextDisabled(&"0b{state.io.soundCtrl:08b}")
+
+      igPushItemFlag(ImGuiItemFlags.Disabled, true)
+      igPushStyleVar(ImGuiStyleVar.Alpha, igGetStyle().alpha * 0.5)
+      var
+        isOn = state.isOn
+      igCheckbox("Enabled", addr isOn)
+
+      var
+        isSo1On = state.isSo1On
+        so1Volume = state.so1Volume.int32
+      igText("SO1")
+      igSameLine()
+      igCheckbox("##so1_enabled", addr isSo1On)
+      igSameLine()
+      igSliderInt("Volume##so1_volume", addr so1Volume, 0, 7, flags = ImGuiSliderFlags.NoInput)
+
+      var
+        isSo2On = state.isSo2On
+        so2Volume = state.so2Volume.int32
+      igText("SO2")
+      igSameLine()
+      igCheckbox("##so2_enabled", addr isSo2On)
+      igSameLine()
+      igSliderInt("Volume##so2_volume", addr so2Volume, 0, 7, flags = ImGuiSliderFlags.NoInput)
+
+      igPopStyleVar()
+      igPopItemFlag()
+
+    if igCollapsingHeader("Channel 1"):
+      igText("ch1Sweep       ")
+      igSameLine()
+      igTextDisabled(&"{state.io.ch1Sweep:#08x}")
+      igText("ch1Len         ")
+      igSameLine()
+      igTextDisabled(&"{state.io.ch1Len:#08x}")
+      igText("ch1Envelope    ")
+      igSameLine()
+      igTextDisabled(&"{state.io.ch1Envelope:#08x}")
+      igText("ch1FrequencyL  ")
+      igSameLine()
+      igTextDisabled(&"{state.io.ch1FrequencyL:#08x}")
+      igText("ch1FrequencyH  ")
+      igSameLine()
+      igTextDisabled(&"{state.io.ch1FrequencyH:#08x}")
+
+    if igCollapsingHeader("Channel 2"):
+      igText("ch2Len         ")
+      igSameLine()
+      igTextDisabled(&"{state.io.ch2Len:#08x}")
+      igText("ch2Envelope    ")
+      igSameLine()
+      igTextDisabled(&"{state.io.ch2Envelope:#08x}")
+      igText("ch2FrequencyL  ")
+      igSameLine()
+      igTextDisabled(&"{state.io.ch2FrequencyL:#08x}")
+      igText("ch2FrequencyH  ")
+      igSameLine()
+      igTextDisabled(&"{state.io.ch2FrequencyH:#08x}")
+
+    if igCollapsingHeader("Channel 3"):
+      igText("ch3Ctr         ")
+      igSameLine()
+      igTextDisabled(&"{state.io.ch3Ctr:#08x}")
+      igText("ch3Len         ")
+      igSameLine()
+      igTextDisabled(&"{state.io.ch3Len:#08x}")
+      igText("ch3Lev         ")
+      igSameLine()
+      igTextDisabled(&"{state.io.ch3Lev:#08x}")
+      igText("ch3FrequencyL  ")
+      igSameLine()
+      igTextDisabled(&"{state.io.ch3FrequencyL:#08x}")
+      igText("ch3FrequencyH  ")
+      igSameLine()
+      igTextDisabled(&"{state.io.ch3FrequencyH:#08x}")
+    
+    if igCollapsingHeader("Channel 4"):
+      igText("ch4Len       ")
+      igSameLine()
+      igTextDisabled(&"{state.io.ch4Len:#08x}")
+      igText("ch4Envelope  ")
+      igSameLine()
+      igTextDisabled(&"{state.io.ch4Envelope:#08x}")
+
+  igEnd()
+
+proc controlsWindow(isOpen: var bool, history: History, gameboy: Gameboy, isRunning: var bool, speedBuffer: var seq[float32]) =
+  assert gameboy.kind == gkDMG
+  if not isOpen:
+    return
+  igSetNextWindowPos(ImVec2(x: 5, y: 25), FirstUseEver)
+  igSetNextWindowSize(ImVec2(x: 152, y: 225), FirstUseEver)
+  if igBegin("Controls", addr isOpen) and not igIsWindowCollapsed():
+    if igBeginTabBar("options"):
+      if igBeginTabItem("General"):
+        if igButton("Reset"):
+          gameboy.load(readFile(Rom))
+          history.clear()
+        igSameLine()
+        igToggleButton("is_running", isRunning)
+        igPushButtonRepeat(true)
+        igSameLine()
+        if igButtonArrow("##step", ImGuiDir.Right):
+          isRunning = false
+          discard gameboy.step()
+        igSameLine()
+        if igButtonArrow("##step_frame", ImGuiDir.Right):
+          isRunning = false
+          gameboy.stepFrame()
+          history.advance(gameboy)
+        igPopButtonRepeat()
+
+        igSameLine(igGetWindowWidth() - 100)
+        igTextDisabled(&"{displayBytes(history.sizeInBytes())}")
+
+        igPushItemWidth(-1)
+        var
+          i = history.index.int32
+        if igSliderInt("##history", addr i, 0, history.len.int32, "%d"):
+          history.restore(gameboy, i.int)
+        igPushItemWidth(0)
+        igEndTabItem()
+
+      if igBeginTabItem("Speed"):
+        igPlotLines("Speed", addr speedBuffer[0], speedBuffer.len.int32,
+          overlay_text = &"{speedBuffer[speedBuffer.high]:6.2f}%",
+          scale_min = 0, scale_max = 1000,
+          graph_size = ImVec2(x: 0, y: 40))
+        igEndTabItem()
+    igEndTabBar()
+  igEnd()
 
 
 proc main*() =
@@ -261,6 +422,17 @@ proc main*() =
   if glSetSwapInterval(-1) == -1:
     # If adaptive vsync isn't supported try normal vsync
     discard glSetSwapInterval(1)
+
+  var
+    spec: AudioSpec
+  spec.freq = 44100
+  # TODO: will endiannes break this?
+  spec.format = AUDIO_F32LSB
+  spec.channels = 2
+  spec.samples = 1024
+
+  discard openAudio(addr spec, nil)
+  pauseAudio(0)
 
   loadExtensions()
 
@@ -276,6 +448,7 @@ proc main*() =
     history = newHistory()
     isOpen = true
     isRunning = true
+    showApu = true
     showPpu = true
     showControls = true
     showCpu = true
@@ -361,8 +534,9 @@ proc main*() =
           showOptions = true
         igEndMenu()
       if igBeginMenu("Window"):
-        igCheckbox("Controls", addr showControls) 
+        igCheckbox("Controls", addr showControls)
         igCheckbox("Ppu", addr showPpu)
+        igCheckbox("APU", addr showApu)
         igCheckbox("Cpu window", addr showCpu)
         igCheckbox("Memory editor", addr editor.open)
         igSeparator()
@@ -416,6 +590,9 @@ proc main*() =
 
     ppuWindow.draw(showPpu, gameboy)
     editor.draw(gameboy)
+    cpuWindow(showCpu, gameboy)
+    apuDebuggerWindow(showApu, gameboy)
+    controlsWindow(showControls, history, gameboy, isRunning, speedBuffer)
     
     igSetNextWindowPos(ImVec2(x: 162, y: 25), FirstUseEver)
     igSetNextWindowSize(ImVec2(x: 316, y: 318), FirstUseEver)
@@ -428,57 +605,12 @@ proc main*() =
       igGetContentRegionAvailNonUDT(addr size)
       igImage(cast[pointer](mainTexture.texture), size)
     igEnd()
-
-    cpuWindow(showCpu, gameboy)
     
     var
       path: string
     if filePopup.render(path):
       gameboy.load(readFile(path))
       isRunning = true
-
-    if showControls:
-      igSetNextWindowPos(ImVec2(x: 5, y: 25), FirstUseEver)
-      igSetNextWindowSize(ImVec2(x: 152, y: 225), FirstUseEver)
-      if igBegin("Controls"):
-        if igBeginTabBar("options"):
-          if igBeginTabItem("General"):
-            if igButton("Reset"):
-              gameboy.load(readFile(Rom))
-              history.clear()
-            igSameLine()
-            igToggleButton("is_running", isRunning)
-            igPushButtonRepeat(true)
-            igSameLine()
-            if igButtonArrow("##step", ImGuiDir.Right):
-              isRunning = false
-              discard gameboy.step()
-            igSameLine()
-            if igButtonArrow("##step_frame", ImGuiDir.Right):
-              isRunning = false
-              gameboy.stepFrame()
-              history.advance(gameboy)
-            igPopButtonRepeat()
-
-            igSameLine(igGetWindowWidth() - 100)
-            igTextDisabled(&"{displayBytes(history.sizeInBytes())}")
-
-            igPushItemWidth(-1)
-            var
-              i = history.index.int32
-            if igSliderInt("##history", addr i, 0, history.len.int32, "%d"):
-              history.restore(gameboy, i.int)
-            igPushItemWidth(0)
-            igEndTabItem()
-
-          if igBeginTabItem("Speed"):
-            igPlotLines("Speed", addr speedBuffer[0], speedBuffer.len.int32,
-              overlay_text = &"{speedBuffer[speedBuffer.high]:6.2f}%",
-              scale_min = 0, scale_max = 1000,
-              graph_size = ImVec2(x: 0, y: 40))
-            igEndTabItem()
-        igEndTabBar()
-      igEnd()
 
     showDemoWindow(showDemo)
 
@@ -493,6 +625,7 @@ proc main*() =
 
   destroy mainTexture
   destroy ppuWindow
+  closeAudio()
   igOpenGL3Shutdown()
   igSdl2Shutdown()
   glDeleteContext(glContext)

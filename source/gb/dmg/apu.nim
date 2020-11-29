@@ -13,6 +13,7 @@
 
 ]##
 import
+  sdl2/audio,
   std/math,
   mem, gb/common/util
 
@@ -106,7 +107,7 @@ type
     io: ApuStateIo
     ch3Buffer: seq[float32]
     ch3Position: int
-    fs: uint16            ## Frame sequencer 512Hz (8192 cpu cycles)
+    fs: uint64            ## Frame sequencer 512Hz (8192 cpu cycles)
                           ##   Length ctrl: 256Hz (16384 cpu cycles)
                           ##   Sweep: 128Hz (32768 cpu cycles)
                           ##   Vol envelope: 64Hz (65 536 cpu cycles)
@@ -136,9 +137,9 @@ func ch3Sample(self: ApuStateIo, i: int): float32 =
   let
     b = self.wav[i div 2]
   if i.testBit(0):
-    b.extract(0, 3).float32
-  else:
     b.extract(4, 7).float32
+  else:
+    b.extract(0, 3).float32
 
 func ch3Step(self: var ApuState, cycles: int) =
   const
@@ -147,23 +148,59 @@ func ch3Step(self: var ApuState, cycles: int) =
     if self.io.isCh3On:
       self.fs += 1
       if self.fs.isDivByPowerOf2(14):
-        self.io.ch3Len = max(self.io.ch3Len - 1, 0)
-      if self.io.isCh3LenEnabled and self.io.ch3Len == 0:
-        self.io.ch3TurnOff()
+        self.io.ch3Len = max(self.io.ch3Len + 1, 0)
       let
         level = LevelMultiplier[self.io.ch3Level]
+      
+      # TODO: frequency based timer
+      # Frequency = 4194304/(64*(2048-self.io.ch3Freq())) Hz = 65536/(2048-self.io.ch3Freq()) Hz
+      if self.fs mod (65536 div (2048 - self.io.ch3Freq().uint64)) == 0:
+        let
+          sample = self.io.ch3Sample(self.ch3Position) * level
+        self.ch3Buffer &= sample
+        self.ch3Buffer &= sample
+        self.ch3Position += 1
+
+      if self.io.isCh3LenEnabled and self.io.ch3Len == 255:
+        self.io.ch3TurnOff()
 
 
-func isOn(self: ApuState): bool =
+func isOn*(self: ApuState): bool =
   self.io.soundCtrl.testBit(7)
+
+func isSo1On*(self: ApuState): bool =
+  self.io.channelCtrl.testBit(3)
+
+func so1Volume*(self: ApuState): range[0..7] =
+  self.io.channelCtrl.extract(0, 2)
+
+func isSo2On*(self: ApuState): bool =
+  self.io.channelCtrl.testBit(7)
+
+func so2Volume*(self: ApuState): range[0..7] =
+  self.io.channelCtrl.extract(4, 6)
 
 proc step*(self: Apu, cycles: int) =
   if not self.state.isOn:
     self.state.ch3Step(cycles)
+  
+  if self.state.ch3Buffer.len >= 100:
+    discard queueAudio(1, addr self.state.ch3Buffer[0], (self.state.ch3Buffer.len * 4).uint32)
 
 
 proc setupMemHandler*(mcu: Mcu, self: Apu) =
-  mcu.setHandler(msApu, addr self.state.io)
+  let
+    ioHandler = createHandlerFor(msApu, addr self.state.io)
+    ch3Handler = MemHandler(
+      read: proc(address: MemAddress): uint8 =
+        ioHandler.read(address),
+      write: proc(address: MemAddress, value: uint8) =
+        if address == 0xff1e and value.testBit(7):
+          self.state.ch3Position = 0
+        else:
+          ioHandler.write(address, value)
+    )
+  mcu.setHandler(msApu, ch3Handler)
   self.mcu = mcu
 
 proc newApu*(mcu: Mcu): Apu =
