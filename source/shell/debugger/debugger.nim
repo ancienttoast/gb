@@ -486,9 +486,6 @@ proc main*() =
         of SDL_SCANCODE_LEFT: gameboy.input(iLeft, m.state == KeyPressed.uint8)
         of SDL_SCANCODE_DOWN: gameboy.input(iDown, m.state == KeyPressed.uint8)
         of SDL_SCANCODE_RIGHT: gameboy.input(iRight, m.state == KeyPressed.uint8)
-        of SDL_SCANCODE_ESCAPE:
-          if m.state == KeyReleased.uint8:
-            isOpen = false
         else:
           discard
       of DropFile:
