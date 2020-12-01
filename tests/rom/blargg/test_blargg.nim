@@ -32,8 +32,7 @@ proc saveResult(file: string, result: Image[ColorRGBU]) =
 template testFull(name: string, rom: string, expected: string, stop: int) =
   test name:
     var
-      gameboy = newGameboy("")
-    gameboy.load(readFile("tests/rom/" & rom))
+      gameboy = newGameboy(readFile("tests/rom/" & rom))
     check gameboy.kind == gkDMG
 
     while gameboy.dmg.cpu.state.pc != stop:

@@ -20,8 +20,7 @@ proc checkLcd(expected: string, result: Image[ColorRGBU]) =
 suite "rom.dmg-acid2":
   test "dmg-acid2":
     var
-      gameboy = newGameboy("")
-    gameboy.load(readFile("tests/rom/dmg_acid2/dmg-acid2.gb"))
+      gameboy = newGameboy(readFile("tests/rom/dmg_acid2/dmg-acid2.gb"))
     check gameboy.kind == gkDMG
 
     while gameboy.dmg.cycles < 4424398:
