@@ -35,13 +35,6 @@ Sources
 * `<http://gameboy.mongenel.com/dmg/asmmemmap.html>`_
 
 ]##
-
-
-const
-  MbcRom* = 0x0000'u16..0x7fff'u16
-  MbcRam* = 0xa000'u16..0xbfff'u16
-
-
 type
   MemAddress* = uint16
 
@@ -97,7 +90,7 @@ type
     handlers: array[MemSlot, MemHandler]
 
 let
-  NullHandler = MemHandler(
+  NullHandler* = MemHandler(
     read: proc(address: MemAddress): uint8 = 0,
     write: proc(address: MemAddress, value: uint8) = discard
   )
