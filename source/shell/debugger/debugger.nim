@@ -4,7 +4,7 @@ import
   imageman,
   style, gb/[gameboy, rewind], gb/dmg/[cpu, mem, ppu, apu], shell/render
 import
-  mem_editor, file_popup, toggle
+  mem_editor, file_popup, toggle, widget/key_popup
 
 when defined(profiler):
   import nimprof
@@ -461,6 +461,16 @@ proc main*() =
     states: array[10, Option[GameboyState]]
     painter = initPainter(PaletteDefault)
     frameskip = 0
+    inputMap: array[InputKey, sdl2.Scancode] = [
+      SDL_SCANCODE_RIGHT,
+      SDL_SCANCODE_LEFT,
+      SDL_SCANCODE_UP,
+      SDL_SCANCODE_DOWN,
+      SDL_SCANCODE_A,
+      SDL_SCANCODE_S,
+      SDL_SCANCODE_RSHIFT,
+      SDL_SCANCODE_RETURN
+    ]
 
   var
     start = getMonoTime()
@@ -475,17 +485,9 @@ proc main*() =
       of KeyDown, KeyUp:
         let
           m = cast[KeyboardEventPtr](addr event)
-        case m.keysym.scancode
-        of SDL_SCANCODE_A: gameboy.input(iA, m.state == KeyPressed.uint8)
-        of SDL_SCANCODE_S: gameboy.input(iB, m.state == KeyPressed.uint8)
-        of SDL_SCANCODE_RETURN: gameboy.input(iStart, m.state == KeyPressed.uint8)
-        of SDL_SCANCODE_RSHIFT: gameboy.input(iSelect, m.state == KeyPressed.uint8)
-        of SDL_SCANCODE_UP: gameboy.input(iUp, m.state == KeyPressed.uint8)
-        of SDL_SCANCODE_LEFT: gameboy.input(iLeft, m.state == KeyPressed.uint8)
-        of SDL_SCANCODE_DOWN: gameboy.input(iDown, m.state == KeyPressed.uint8)
-        of SDL_SCANCODE_RIGHT: gameboy.input(iRight, m.state == KeyPressed.uint8)
-        else:
-          discard
+        for input, scancode in inputMap:
+          if m.keysym.scancode == scancode:
+            gameboy.input(input, m.state == KeyPressed.uint8)
       of DropFile:
         let
           d = cast[DropEventPtr](addr event)
@@ -559,7 +561,7 @@ proc main*() =
     igSetNextWindowPos(center, ImGuiCond.Appearing, ImVec2(x: 0.5, y: 0.5))
     if showOptions:
       igOpenPopup("Options")
-    if igBeginPopupModal("Options", addr showOptions, ImGuiWindowFlags.AlwaysAutoResize):
+    if igBeginPopupModal("Options", addr showOptions):
       if igBeginTabBar("options"):
         if igBeginTabItem("General"):
           if igBeginCombo("Frameskip", if frameskip == 0: "Unlimited" else: $(frameskip - 1)):
@@ -579,6 +581,24 @@ proc main*() =
           igColorEdit3("Dark Gray", painter.palette[gsDarkGray])
           igColorEdit3("Black", painter.palette[gsBlack])
           igEndTabItem()
+        
+        if igBeginTabItem("Controls"):
+          igSetNextItemOpen(true, ImGuiCond.FirstUseEver)
+          if igTreeNode("DMG"):
+            for input in InputKey:
+              igText($input)
+              igSameLine(100)
+              let
+                key = sdl2.getKeyFromScancode(inputMap[input])
+              if igSmallButton($sdl2.getKeyName(key) & "##" & $input):
+                openKeyPopup($input)
+              let
+                (scancode, isInput) = keyPopup($input)
+              if isInput:
+                inputMap[input] = scancode.Scancode
+            igTreePop()
+          igEndTabItem()
+
         igEndTabBar()
       igEndPopup()
 
