@@ -1,7 +1,7 @@
 import
-  std/[strformat, times, monotimes, options],
+  std/[strformat, times, monotimes, options, streams],
   opengl, nimgl/imgui, sdl2, sdl2/audio, impl_sdl, impl_opengl,
-  imageman,
+  imageman, bingod,
   style, gb/[gameboy, rewind], gb/dmg/[cpu, mem, ppu, apu], shell/render
 import
   mem_editor, file_popup, toggle, widget/key_popup
@@ -458,7 +458,7 @@ proc main*() =
     editor = newMemoryEditor()
     mainTexture = initTexture()
     filePopup = initFilePopup("Open file")
-    states: array[10, Option[GameboyState]]
+    states: array[10, Option[string]]
     painter = initPainter(PaletteDefault)
     frameskip = 0
     inputMap: array[InputKey, sdl2.Scancode] = [
@@ -542,16 +542,23 @@ proc main*() =
         if igBeginMenu("Save"):
           for i, state in states.mpairs:
             let
-              label = $i & (if state.isSome: " - " & $state.get.time else: " -")
+              label = $i & (if state.isSome: " - " else: "")# & $state.get.time else: " -")
             if igMenuItem(label):
-              state = some(gameboy.save())
+              let
+                save = gameboy.save()
+                s = newStringStream()
+              s.storeBin(save)
+              s.setPosition(0)
+              state = some(s.readAll())
           igEndMenu()
         if igBeginMenu("Load"):
           for i, state in states.mpairs:
             let
-              label = $i & (if state.isSome: " - " & $state.get.time else: " -")
+              label = $i & (if state.isSome: " - " else: "")# & $state.get.time else: " -")
             if igMenuItem(label):
-              gameboy.load(state.get)
+              let
+                s = newStringStream(state.get)
+              gameboy.load(s.binTo(GameboyState))
           igEndMenu()
         igEndMenu()
       igEndMainMenuBar()

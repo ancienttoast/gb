@@ -73,13 +73,13 @@ type
 
 
   MbcState* = object
-    case kind: CartridgeType
+    case kind*: CartridgeType
     of ctRom, ctRomRam, ctRomRamBattery:
       discard
     of ctMbc1, ctMbc1Ram, ctMbc1RamBattery:
-      mbc1: Mbc1State
+      mbc1*: Mbc1State
     of ctMbc3, ctMbc3Ram, ctMbc3RamBattery:
-      mbc3: Mbc3State
+      mbc3*: Mbc3State
     else:
       discard
 

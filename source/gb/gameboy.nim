@@ -52,12 +52,12 @@ type
     gkCGB
 
   GameboyState* = object
-    time*: DateTime
-    case kind: GameboyKind
+    #time*: DateTime
+    case kind*: GameboyKind
     of gkDMG:
-      dmgState: DmgState
+      dmgState*: DmgState
     of gkCGB:
-      cgbState: CgbState
+      cgbState*: CgbState
     else:
       discard
 
@@ -83,7 +83,7 @@ proc input*(self: Gameboy, input: InputKey, isPressed: bool) =
 proc save*(self: Gameboy): GameboyState =
   assert self.kind in {gkDMG, gkCGB}
   result = GameboyState(
-    time: now(),
+    #time: now(),
     kind: self.kind
   )
   case self.kind
