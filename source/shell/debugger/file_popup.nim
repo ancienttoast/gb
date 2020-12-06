@@ -35,9 +35,11 @@ proc printSize(sizeB: int): string =
 
 proc get_files_in_path(path: string): seq[Item] =
   result = newSeq[Item]()
-  result &= (path: (path/"..").absolutePath().normalizedPath(), name: "..", size: 0, isDir: true)
-  for kind, path in walkDir(path, relative = false):
-    result &= (path: path, name: path.lastPathPart(), size: getFileSize(path).int, isDir: path.dirExists())
+  # TODO: come up with a solution for emscripten
+  when not defined(emscripten):
+    result &= (path: (path/"..").absolutePath().normalizedPath(), name: "..", size: 0, isDir: true)
+    for kind, path in walkDir(path, relative = false):
+      result &= (path: path, name: path.lastPathPart(), size: getFileSize(path).int, isDir: path.dirExists())
 
 proc render*(self: var FilePopup, outPath: var string): bool =
   result = false

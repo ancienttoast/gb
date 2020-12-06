@@ -109,3 +109,6 @@ proc readCartHeader*(data: string): CartHeader =
 
 func isCgbOnly*(self: CartHeader): bool =
   self.cgb == 0xc0
+
+func `$`*(self: CartHeader): string =
+  $self.title & "v" & $self.version

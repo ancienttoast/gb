@@ -53,6 +53,7 @@ type
 
   GameboyState* = object
     #time*: DateTime
+    cart*: string
     case kind*: GameboyKind
     of gkDMG:
       dmgState*: DmgState
@@ -89,8 +90,10 @@ proc save*(self: Gameboy): GameboyState =
   case self.kind
   of gkDMG:
     result.dmgState = self.dmg.save()
+    result.cart = $self.dmg.cart.header
   of gkCGB:
     result.cgbState = self.cgb.save()
+    result.cart = $self.cgb.cart.header
   else:
     discard
 

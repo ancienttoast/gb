@@ -1,21 +1,7 @@
 import
   sdl2,
+  shell/emscripten,
   gb/gameboy
-
-
-
-proc hackedRawProc*[T: proc](x: T): pointer {.noSideEffect, inline.} =
-  ## Retrieves the raw proc pointer of the closure `x`. This is
-  ## useful for interfacing closures with C.
-  {.emit: """
-  `result` = (void *)`x`.ClP_0;
-  """.}
-
-type
-  em_arg_callback_func = proc(data: pointer) {.cdecl.}
-proc emscripten_set_main_loop_arg*(f: em_arg_callback_func, data: pointer, fps: cint, simulate_infinite_loop: cint) {.importc.}
-proc emscripten_cancel_main_loop*() {.importc.}
-
 
 
 
@@ -28,7 +14,7 @@ proc main*() =
   sdl2.init(INIT_VIDEO or INIT_AUDIO)
   let
     window = sdl2.createWindow("GameBoy", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, Width * Scale, Height * Scale, 0)
-    renderer = window.createRenderer(-1, 0)
+    renderer = window.createRenderer(-1, Renderer_PresentVsync)
   assert window != nil
   assert renderer != nil
 
@@ -74,10 +60,7 @@ proc main*() =
     renderer.copy(texture, nil, nil)
     renderer.present()
   
-  let
-    env = protect(loop.rawEnv)
-  emscripten_set_main_loop_arg(cast[em_arg_callback_func](loop.hackedRawProc), env.data, -1, 1)
-  dispose(env)
+  emscripten_set_main_loop_arg(loop, -1, 1)
 
   destroy texture
   destroy renderer

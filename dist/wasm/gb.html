@@ -10,9 +10,21 @@
         background-color: #000
       }
 
+      /*
       #canvas {
         padding: 0;
         margin: auto;
+        display: block;
+      }
+      */
+      #canvas {
+        position: absolute;
+        top: 0px;
+        left: 0px;
+        margin: 0px;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
         display: block;
       }
     </style>
@@ -51,7 +63,7 @@
     <script type="text/javascript">
       function onResize() {
         var canvas = document.getElementById("canvas");
-        canvas.style.height = window.innerHeight + "px";
+        //canvas.style.height = window.innerHeight + "px";
       }
 
       window.onresize = onResize;

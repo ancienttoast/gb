@@ -32,7 +32,7 @@ task wasm, "wasm":
   let
     file = system.paramStr(system.paramCount())
     (_, name, _) = splitFile(file)
-  exec &"nim --out:{build}/gb.html --define:release --define:wasm --passL:\"--shell-file {build}/gb.html\" c {file}"
+  exec &"nim --out:{build}/gb.html --define:release --define:emscripten --define:wasm --passL:\"--shell-file {build}/gb.html\" cpp {file}"
 
 task psp, "psp":
   const

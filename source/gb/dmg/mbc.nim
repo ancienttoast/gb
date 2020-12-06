@@ -84,7 +84,7 @@ type
       discard
 
   Cartridge* = ref object
-    header: Cartheader
+    header*: Cartheader
     data*: string
     state*: MbcState
 

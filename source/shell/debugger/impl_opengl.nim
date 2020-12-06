@@ -12,7 +12,6 @@ import
     nimgl/imgui, opengl
 
 var
-  gGlslVersionString: cstring = "#version 330 core"
   gFontTexture: uint32 = 0
   gShaderHandle: uint32 = 0
   gVertHandle: uint32 = 0
@@ -72,7 +71,7 @@ proc igOpenGL3CreateFontsTexture() =
   glBindTexture(GL_TEXTURE_2D, gFontTexture)
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR.ord)
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR.ord)
-  glPixelStorei(GL_UNPACK_ROW_LENGTH, 0)
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA.ord, text_w, text_h, 0, GL_RGBA, GL_UNSIGNED_BYTE, text_pixels)
 
   io.fonts.texID = cast[ImTextureID](gFontTexture)
@@ -87,30 +86,39 @@ proc igOpenGL3CreateDeviceObjects() =
   glGetIntegerv(GL_VERTEX_ARRAY_BINDING, last_vertex_array.addr)
 
   # @NOTE: if you need the other shader versions, PR them please.
-  var vertex_shader_glsl: string = """
-layout (location = 0) in vec2 Position;
-layout (location = 1) in vec2 UV;
-layout (location = 2) in vec4 Color;
-uniform mat4 ProjMtx;
-out vec2 Frag_UV;
-out vec4 Frag_Color;
-void main() {
-  Frag_UV = UV;
-  Frag_Color = Color;
-  gl_Position = ProjMtx * vec4(Position.xy, 0, 1);
-}
-  """
-  var fragment_shader_glsl: string = """
-in vec2 Frag_UV;
-in vec4 Frag_Color;
-uniform sampler2D Texture;
-layout (location = 0) out vec4 Out_Color;
-void main() {
-  Out_Color = Frag_Color * texture(Texture, Frag_UV.st);
-}
-  """
-  vertex_shader_glsl = $gGlslVersionString & "\n" & $vertex_shader_glsl
-  fragment_shader_glsl = $gGlslVersionString & "\n" & $fragment_shader_glsl
+  var
+    vertex_shader_glsl_120 = """
+      uniform mat4 ProjMtx;
+      attribute vec2 Position;
+      attribute vec2 UV;
+      attribute vec4 Color;
+      varying vec2 Frag_UV;
+      varying vec4 Frag_Color;
+      void main()
+      {
+          Frag_UV = UV;
+          Frag_Color = Color;
+          gl_Position = ProjMtx * vec4(Position.xy,0,1);
+      }
+    """
+
+  var
+    fragment_shader_glsl_120 = """
+      #ifdef GL_ES
+          precision mediump float;
+      #endif
+      uniform sampler2D Texture;
+      varying vec2 Frag_UV;
+      varying vec4 Frag_Color;
+      void main()
+      {
+          gl_FragColor = Frag_Color * texture2D(Texture, Frag_UV.st);
+      }
+    """
+
+  let
+    vertex_shader_glsl = vertex_shader_glsl_120
+    fragment_shader_glsl = fragment_shader_glsl_120
 
   var
     cstrVertex = allocCStringArray(@[vertex_shader_glsl])

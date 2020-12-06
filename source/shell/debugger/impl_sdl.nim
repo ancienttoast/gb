@@ -143,8 +143,10 @@ proc igSdl2Init(window: WindowPtr): bool =
   io.keyMap[ImGuiKey.Y.int] = SDL_SCANCODE_Y.int32
   io.keyMap[ImGuiKey.Z.int] = SDL_SCANCODE_Z.int32
 
-  io.setClipboardTextFn = igImplSdl2SetClipboardText
-  io.getClipboardTextFn = igImplSdl2GetClipboardText
+  # TODO: doesn't compile with emscripten
+  when not defined(emscripten):
+    io.setClipboardTextFn = igImplSdl2SetClipboardText
+    io.getClipboardTextFn = igImplSdl2GetClipboardText
   io.clipboardUserData = nil
 
   # Load mouse cursors
@@ -224,16 +226,16 @@ proc igImplSdl2UpdateMousePosAndButtons() =
   var
     mx, my: cint
   let
-    mouseButtons = getMouseState(mx, my)
-  io.mouseDown[0] = g_MousePressed[0] or (mouse_buttons and SDL_BUTTON(BUTTON_LEFT)) != 0  # If a mouse press event came, always pass it as "mouse held this frame", so we don't miss click-release events that are shorter than 1 frame.
-  io.mouseDown[1] = g_MousePressed[1] or (mouse_buttons and SDL_BUTTON(BUTTON_RIGHT)) != 0
-  io.mouseDown[2] = g_MousePressed[2] or (mouse_buttons and SDL_BUTTON(BUTTON_MIDDLE)) != 0
+    mouseButtons = sdl2.getMouseState(mx, my)
+  io.mouseDown[0] = g_MousePressed[0] or (mouseButtons and SDL_BUTTON(BUTTON_LEFT)) != 0  # If a mouse press event came, always pass it as "mouse held this frame", so we don't miss click-release events that are shorter than 1 frame.
+  io.mouseDown[1] = g_MousePressed[1] or (mouseButtons and SDL_BUTTON(BUTTON_RIGHT)) != 0
+  io.mouseDown[2] = g_MousePressed[2] or (mouseButtons and SDL_BUTTON(BUTTON_MIDDLE)) != 0
   g_MousePressed[0] = false
   g_MousePressed[1] = false
   g_MousePressed[2] = false
 
   #if SDL_HAS_CAPTURE_AND_GLOBAL_MOUSE && !defined(__EMSCRIPTEN__) && !defined(__ANDROID__) && !(defined(__APPLE__) && TARGET_OS_IOS)
-  when SDL_HAS_CAPTURE_AND_GLOBAL_MOUSE:
+  when SDL_HAS_CAPTURE_AND_GLOBAL_MOUSE and not defined(emscripten):
     let
       focusedWindow = getKeyboardFocus()
     if g_Window == focused_window:
