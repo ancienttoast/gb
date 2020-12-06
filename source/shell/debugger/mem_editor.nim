@@ -180,7 +180,12 @@ proc draw*(self: MemoryEditor, title: string, data_provider: DataProviderProc, d
               data_setter(address, data.uint8)
           igPopID()
         else:
-          igText("%02X ", data_provider(address))
+          let
+            b = data_provider(address)
+          if b == 0:
+            igTextDisabled("%02X ", b)
+          else:
+            igText("%02X ", b)
           if self.allowEdits and igIsItemHovered() and igIsMouseClicked(ImGuiMouseButton.Left):
             self.dataEditingTakeFocus = true
             self.dataEditingAddr = address
