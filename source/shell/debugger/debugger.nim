@@ -415,7 +415,7 @@ proc controlsWindow(isOpen: var bool, history: History, gameboy: var Gameboy, is
         igPushItemWidth(-1)
         var
           i = history.index.int32
-        if igSliderInt("##history", addr i, 0, history.len.int32, "%d"):
+        if igSliderInt("##history", addr i, 0, history.high.int32, "%d"):
           history.restore(gameboy, i.int)
         igPushItemWidth(0)
         igEndTabItem()
