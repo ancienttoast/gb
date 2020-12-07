@@ -19,7 +19,7 @@ type
   DataProviderProc = proc(adress: int): uint8
   DataSetterProc = proc(adress: int, value: uint8)
 
-  MemoryEditor* = ref object
+  MemoryEditor* = object
     open*: bool
     allowEdits: bool
     rows: int32
@@ -28,9 +28,8 @@ type
     dataInput: string
     addrInput: string
 
-proc newMemoryEditor*(): MemoryEditor =
+proc initMemoryEditor*(): MemoryEditor =
   MemoryEditor(
-    open: true,
     rows: 16,
     dataEditingAddr: -1,
     dataEditingTakeFocus: false,
@@ -65,10 +64,10 @@ proc get_cursor_pos(data: ptr ImGuiInputTextCallbackData): int32 {.cdecl.} =
       p_cursor_pos[] = data.cursorPos
   return 0
 
-proc draw*(self: MemoryEditor, title: string, data_provider: DataProviderProc, data_setter: DataSetterProc, mem_size: int, base_display_addr = 0) =
-  if not self.open:
+proc draw*(isOpen: var bool, self: var MemoryEditor, title: string, data_provider: DataProviderProc, data_setter: DataSetterProc, mem_size: int, base_display_addr = 0) =
+  if not isOpen:
     return
-  if igBegin(title, addr self.open):
+  if igBegin(title, addr isOpen) and not igIsWindowCollapsed():
     igBeginChild("##scrolling", ImVec2(x: 0, y: -igGetFrameHeightWithSpacing()))
 
     igPushStyleVar(ImGuiStyleVar.FramePadding, ImVec2(x: 0, y: 0))

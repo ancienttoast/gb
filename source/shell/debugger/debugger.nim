@@ -4,7 +4,7 @@ import
   imageman, bingod,
   style, gb/[gameboy, rewind], gb/dmg/[cpu, mem, ppu, apu], shell/render
 import
-  mem_editor, file_popup, toggle, widget/key_popup
+  widget/[mem_editor, file_popup, toggle, key_popup]
 
 when defined(profiler):
   import nimprof
@@ -54,9 +54,10 @@ proc initTexture(): Texture =
 proc destroy(self: Texture) =
   glDeleteTextures(1, unsafeAddr self.texture)
 
-
 proc igTexture(self: Texture, scale: float) =
   igImage(cast[pointer](self.texture), ImVec2(x: self.width.float32 * scale, y: self.height.float32 * scale))
+
+
 
 proc igColorEdit3(label: cstring, col: var ColorRGBU, flags: ImGuiColorEditFlags = 0.ImGuiColorEditFlags): bool {.discardable.} =
   var
@@ -71,20 +72,46 @@ proc igColorEdit3(label: cstring, col: var ColorRGBU, flags: ImGuiColorEditFlags
     col[2] = (floatColor[2] * 255).uint8
 
 
+
+template rawDataTooltip(body: untyped): untyped =
+  igTextDisabled("(raw)")
+  if igIsItemHovered():
+    igBeginTooltip()
+    igPushTextWrapPos(igGetFontSize() * 35.0)
+    body
+    igPopTextWrapPos()
+    igEndTooltip()
+
+
+func displayBytes(bytes: int): string =
+  const
+    Divider = 1000
+    Units = [ "B", "kB", "MB", "GB", "TB" ]
+  var
+    current = bytes.float
+  for unit in Units:
+    if current <= Divider:
+      result = &"{current:6.2f}{unit}"
+      break
+    current = current / Divider
+
+
+
 proc showDemoWindow(isOpen: var bool) =
   if not isOpen:
     return
   igShowDemoWindow(addr isOpen)
 
-proc cpuWindow(isOpen: var bool, gameboy: Gameboy) =
+
+proc cpuDebuggerWindow(isOpen: var bool, gameboy: Gameboy) =
   assert gameboy.kind == gkDMG
   if not isOpen:
     return
   let
     state = gameboy.dmg.cpu.state
-  igSetNextWindowPos(ImVec2(x: 80, y: 25), FirstUseEver)
-  igSetNextWindowSize(ImVec2(x: 236, y: 323), FirstUseEver)
-  if igBegin("CPU", addr isOpen):
+  igSetNextWindowPos(ImVec2(x: 5, y: 497), FirstUseEver)
+  igSetNextWindowSize(ImVec2(x: 181, y: 218), FirstUseEver)
+  if igBegin("CPU", addr isOpen) and not igIsWindowCollapsed():
     for r in Register16:
       igTextDisabled($r)
       igSameLine()
@@ -121,13 +148,14 @@ proc cpuWindow(isOpen: var bool, gameboy: Gameboy) =
     igText(&"{state.status}")
   igEnd()
 
-proc draw(editor: MemoryEditor, gameboy: Gameboy) =
+
+proc memDebuggerWindow(isOpen: var bool, editor: var MemoryEditor, gameboy: Gameboy) =
   let
     provider = proc(address: int): uint8 = gameboy.dmg.mcu[address.uint16]
     setter = proc(address: int, value: uint8) = gameboy.dmg.mcu[address.uint16] = value
-  igSetNextWindowPos(ImVec2(x: 80, y: 353), FirstUseEver)
-  igSetNextWindowSize(ImVec2(x: 577, y: 362), FirstUseEver)
-  editor.draw("Memory editor", provider, setter, 0x10000)
+  igSetNextWindowPos(ImVec2(x: 191, y: 497), FirstUseEver)
+  igSetNextWindowSize(ImVec2(x: 552, y: 218), FirstUseEver)
+  draw(isOpen, editor, "Memory editor", provider, setter, 0x10000)
 
 
 type
@@ -137,16 +165,16 @@ type
     spriteTexture: Texture
     oamTextures: array[40, Texture]
 
-proc draw(self: var PpuWindow, isOpen: var bool, gameboy: Gameboy) =
+proc ppuDebuggerWindow(isOpen: var bool, self: var PpuWindow, gameboy: Gameboy) =
   assert gameboy.kind == gkDMG
   if not isOpen:
     return
   let
     ppu = gameboy.dmg.ppu
     painter = initPainter(PaletteDefault)
-  igSetNextWindowPos(ImVec2(x: 662, y: 145), FirstUseEver)
-  igSetNextWindowSize(ImVec2(x: 530, y: 570), FirstUseEver)
-  if igBegin("PPU", addr isOpen, flags = ImGuiWindowFlags.NoResize):
+  igSetNextWindowPos(ImVec2(x: 748, y: 25), FirstUseEver)
+  igSetNextWindowSize(ImVec2(x: 527, y: 690), FirstUseEver)
+  if igBegin("PPU", addr isOpen) and not igIsWindowCollapsed():
     if igBeginTabBar("display"):
       if igBeginTabItem("BG map"):
         var
@@ -266,35 +294,14 @@ proc initPpuWindow(): PpuWindow =
     texture = initTexture()
 
 
-func displayBytes(bytes: int): string =
-  const
-    Divider = 1000
-    Units = [ "B", "kB", "MB", "GB", "TB" ]
-  var
-    current = bytes.float
-  for unit in Units:
-    if current <= Divider:
-      result = &"{current:6.2f}{unit}"
-      break
-    current = current / Divider
-
-template rawDataTooltip(body: untyped): untyped =
-  igTextDisabled("(raw)")
-  if igIsItemHovered():
-    igBeginTooltip()
-    igPushTextWrapPos(igGetFontSize() * 35.0)
-    body
-    igPopTextWrapPos()
-    igEndTooltip()
-
 func apuDebuggerWindow(isOpen: var bool, gameboy: Gameboy) =
   assert gameboy.kind == gkDMG
   if not isOpen:
     return
-  igSetNextWindowPos(ImVec2(x: 662, y: 170), FirstUseEver)
-  igSetNextWindowSize(ImVec2(x: 530, y: 364), FirstUseEver)
+  igSetNextWindowPos(ImVec2(x: 748, y: 50), FirstUseEver)
+  igSetNextWindowSize(ImVec2(x: 527, y: 364), FirstUseEver)
   igSetNextWindowCollapsed(true, FirstUseEver)
-  if igBegin("APU", addr isOpen):
+  if igBegin("APU", addr isOpen) and not igIsWindowCollapsed():
     let
       state = gameboy.dmg.apu.state
 
@@ -399,8 +406,8 @@ proc controlsWindow(isOpen: var bool, history: History, gameboy: var Gameboy, is
   assert gameboy.kind == gkDMG
   if not isOpen:
     return
-  igSetNextWindowPos(ImVec2(x: 662, y: 25), FirstUseEver)
-  igSetNextWindowSize(ImVec2(x: 530, y: 115), FirstUseEver)
+  igSetNextWindowPos(ImVec2(x: 5, y: 392), FirstUseEver)
+  igSetNextWindowSize(ImVec2(x: 237, y: 100), FirstUseEver)
   if igBegin("Controls", addr isOpen) and not igIsWindowCollapsed():
     if igBeginTabBar("options"):
       if igBeginTabItem("General"):
@@ -440,6 +447,7 @@ proc controlsWindow(isOpen: var bool, history: History, gameboy: var Gameboy, is
         igEndTabItem()
     igEndTabBar()
   igEnd()
+
 
 
 proc main*() =
@@ -482,14 +490,15 @@ proc main*() =
     history = newHistory()
     isOpen = true
     isRunning = true
-    showApu = true
+    showApu = false
     showPpu = true
     showControls = true
     showCpu = true
+    showMem = true
     showDemo = false
     showOptions = false
     ppuWindow = initPpuWindow()
-    editor = newMemoryEditor()
+    editor = initMemoryEditor()
     mainTexture = initTexture()
     filePopup = initFilePopup("Open file")
     states: array[10, Option[string]]
@@ -567,8 +576,8 @@ proc main*() =
         igCheckbox("Controls", addr showControls)
         igCheckbox("PPU", addr showPpu)
         igCheckbox("APU", addr showApu)
-        igCheckbox("Cpu window", addr showCpu)
-        igCheckbox("Memory editor", addr editor.open)
+        igCheckbox("CPU", addr showCpu)
+        igCheckbox("Memory editor", addr showMem)
         igSeparator()
         igCheckbox("Demo", addr showDemo)
         igEndMenu()
@@ -645,13 +654,13 @@ proc main*() =
       igEndPopup()
 
     apuDebuggerWindow(showApu, gameboy)
-    ppuWindow.draw(showPpu, gameboy)
-    editor.draw(gameboy)
-    cpuWindow(showCpu, gameboy)
+    ppuDebuggerWindow(showPpu, ppuWindow, gameboy)
+    memDebuggerWindow(showMem, editor, gameboy)
+    cpuDebuggerWindow(showCpu, gameboy)
     controlsWindow(showControls, history, gameboy, isRunning, speedBuffer)
     
-    igSetNextWindowPos(ImVec2(x: 321, y: 25), FirstUseEver)
-    igSetNextWindowSize(ImVec2(x: 336, y: 323), FirstUseEver)
+    igSetNextWindowPos(ImVec2(x: 247, y: 25), FirstUseEver)
+    igSetNextWindowSize(ImVec2(x: 496, y: 467), FirstUseEver)
     if igBegin("Main"):
       let
         image = painter.renderLcd(gameboy.dmg.ppu)
