@@ -146,13 +146,25 @@ proc draw(self: var PpuWindow, isOpen: var bool, gameboy: Gameboy) =
     painter = initPainter(PaletteDefault)
   igSetNextWindowPos(ImVec2(x: 662, y: 145), FirstUseEver)
   igSetNextWindowSize(ImVec2(x: 530, y: 570), FirstUseEver)
-  if igBegin("Ppu", addr isOpen, flags = ImGuiWindowFlags.NoResize):
+  if igBegin("PPU", addr isOpen, flags = ImGuiWindowFlags.NoResize):
     if igBeginTabBar("display"):
       if igBeginTabItem("BG map"):
+        var
+          cursor: ImVec2
+        igGetCursorScreenPosNonUDT(addr cursor)
         let
-          image = painter.renderBackground(ppu, drawGrid = false)
+          image = painter.renderBackground(ppu)
         self.bgTexture.upload(image)
         igTexture(self.bgTexture, 2)
+
+        let
+          color = igGetColorU32(igGetStyle().colors[ImGuiCol.TextDisabled.int32])
+          dl = igGetWindowDrawList()
+        for x in 1..<MapSize:
+          dl.addLine(ImVec2(x: cursor.x + x.float32*TileSize*2, y: cursor.y), ImVec2(x: cursor.x + x.float32*TileSize*2, y: cursor.y + image.h.float32*2), color)
+        for y in 1..<MapSize:
+          dl.addLine(ImVec2(x: cursor.x, y: cursor.y + y.float32*TileSize*2), ImVec2(x: cursor.x + image.w.float32*2, y: cursor.y + y.float32*TileSize*2), color)
+
         igEndTabItem()
       if igBeginTabItem("Sprite map"):
         let
@@ -553,7 +565,7 @@ proc main*() =
         igEndMenu()
       if igBeginMenu("Window"):
         igCheckbox("Controls", addr showControls)
-        igCheckbox("Ppu", addr showPpu)
+        igCheckbox("PPU", addr showPpu)
         igCheckbox("APU", addr showApu)
         igCheckbox("Cpu window", addr showCpu)
         igCheckbox("Memory editor", addr editor.open)

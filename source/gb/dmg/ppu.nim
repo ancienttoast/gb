@@ -75,6 +75,7 @@ const
   MapAddress = [ 0x9800, 0x9C00 ]
   WindowAddress = [ 0x9800'u16, 0x9C00 ]
   MapSize* = 32
+  TileSize* = 8
   TileAddress = [ 0x8800, 0x8000 ]
 
   SpriteLineLimit = 10
