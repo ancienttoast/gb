@@ -43,6 +43,11 @@ const
     kSelect, kStart
   ]
 
+func `$`*(key: InputKey): string =
+  result = system.`$`(key)
+  result = result[1..result.high]
+
+
 type
   GameboyKind* = enum
     gkDMG,
