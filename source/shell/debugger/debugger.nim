@@ -459,10 +459,9 @@ proc main*() =
     window = sdl2.createWindow("GameBoy", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1280, 720, SDL_WINDOW_RESIZABLE or SDL_WINDOW_OPENGL)
     glContext = window.glCreateContext()
   assert glContext != nil
-  when not defined(emscripten):
-    if glSetSwapInterval(-1) == -1:
-      # If adaptive vsync isn't supported try normal vsync
-      discard glSetSwapInterval(1)
+  if glSetSwapInterval(-1) == -1:
+    # If adaptive vsync isn't supported try normal vsync
+    discard glSetSwapInterval(1)
 
   var
     spec: AudioSpec
