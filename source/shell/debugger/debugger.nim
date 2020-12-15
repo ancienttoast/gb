@@ -449,6 +449,15 @@ proc controlsWindow(isOpen: var bool, history: History, gameboy: var Gameboy, is
   igEnd()
 
 
+var
+  gameboyDevice = newGameboy(Rom, BootRom)
+
+proc loadRom(buffer: UncheckedArray[uint8], size: cint) {.exportc.} =
+  var
+    data = newString(size)
+  for i in 0..<size:
+    data[i] = buffer[i].char
+  gameboyDevice = newGameboy(data, BootRom)
 
 proc main*() =
   sdl2.init(INIT_VIDEO or INIT_AUDIO)
@@ -485,7 +494,6 @@ proc main*() =
 
   var
     speedBuffer = newSeq[float32](30)
-    gameboy = newGameboy(Rom, BootRom)
     history = newHistory()
     isOpen = true
     isRunning = true
@@ -529,12 +537,12 @@ proc main*() =
           m = cast[KeyboardEventPtr](addr event)
         for input, scancode in inputMap:
           if m.keysym.scancode == scancode:
-            gameboy.input(input, m.state == KeyPressed.uint8)
+            gameboyDevice.input(input, m.state == KeyPressed.uint8)
       of DropFile:
         let
           d = cast[DropEventPtr](addr event)
         if d.kind == DropFile:
-          gameboy = newGameboy(readFile($d.file), BootRom)
+          gameboyDevice = newGameboy(readFile($d.file), BootRom)
           isRunning = true
           freeClipboardText(d.file)
       else:
@@ -544,13 +552,13 @@ proc main*() =
       frameCount = 0
     if isRunning:
       try:
-        frameCount = gameboy.frame(frameskip)
+        frameCount = gameboyDevice.frame(frameskip)
       except:
         echo getCurrentException().msg
         echo getStackTrace(getCurrentException())
-        echo "cpu\t", gameboy.dmg.cpu.state
+        echo "cpu\t", gameboyDevice.dmg.cpu.state
         isRunning = false
-      history.advance(gameboy)
+      history.advance(gameboyDevice)
     
     let
       dt = (getMonoTime() - start).inNanoseconds.int
@@ -587,7 +595,7 @@ proc main*() =
               label = $i & (if state.isSome: " - " else: "")# & $state.get.time else: " -")
             if igMenuItem(label):
               let
-                save = gameboy.save()
+                save = gameboyDevice.save()
                 s = newStringStream()
               s.storeBin(save)
               s.setPosition(0)
@@ -600,7 +608,7 @@ proc main*() =
             if igMenuItem(label):
               let
                 s = newStringStream(state.get)
-              gameboy.load(s.binTo(GameboyState))
+              gameboyDevice.load(s.binTo(GameboyState))
           igEndMenu()
         igEndMenu()
       igEndMainMenuBar()
@@ -652,17 +660,17 @@ proc main*() =
         igEndTabBar()
       igEndPopup()
 
-    apuDebuggerWindow(showApu, gameboy)
-    ppuDebuggerWindow(showPpu, ppuWindow, gameboy)
-    memDebuggerWindow(showMem, editor, gameboy)
-    cpuDebuggerWindow(showCpu, gameboy)
-    controlsWindow(showControls, history, gameboy, isRunning, speedBuffer)
+    apuDebuggerWindow(showApu, gameboyDevice)
+    ppuDebuggerWindow(showPpu, ppuWindow, gameboyDevice)
+    memDebuggerWindow(showMem, editor, gameboyDevice)
+    cpuDebuggerWindow(showCpu, gameboyDevice)
+    controlsWindow(showControls, history, gameboyDevice, isRunning, speedBuffer)
     
     igSetNextWindowPos(ImVec2(x: 247, y: 25), FirstUseEver)
     igSetNextWindowSize(ImVec2(x: 496, y: 467), FirstUseEver)
     if igBegin("Main"):
       let
-        image = painter.renderLcd(gameboy.dmg.ppu)
+        image = painter.renderLcd(gameboyDevice.dmg.ppu)
       mainTexture.upload(image)
       var
         size: ImVec2
@@ -673,7 +681,7 @@ proc main*() =
     var
       path: string
     if filePopup.render(path):
-      gameboy = newGameboy(Rom, BootRom)
+      gameboyDevice = newGameboy(Rom, BootRom)
       isRunning = true
 
     showDemoWindow(showDemo)
