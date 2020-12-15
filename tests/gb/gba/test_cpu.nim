@@ -24,7 +24,7 @@ suite "unit.gba.cpu: ARM7TDMI - arm: branch instructions":
 
     cpu.step(mcu)
 
-    check cpu.pc == (0x080000c0 + 8)
+    check cpu.pc == (0x080000c0'u32 + 8)
   
   test "B +0":
     var
@@ -37,7 +37,7 @@ suite "unit.gba.cpu: ARM7TDMI - arm: branch instructions":
 
     cpu.step(mcu)
 
-    check cpu.pc == (0x08000008 + 8)
+    check cpu.pc == (0x08000008'u32 + 8)
 
   test "B -8":
     var
