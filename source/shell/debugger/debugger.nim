@@ -1,7 +1,7 @@
 import
   std/[strformat, times, monotimes, options, streams],
   opengl, nimgl/imgui, sdl2, sdl2/audio, impl_sdl, impl_opengl,
-  imageman, bingod,
+  imageman, bingo,
   style, gb/[gameboy, rewind], gb/dmg/[cpu, mem, ppu, apu], shell/render
 import
   widget/[mem_editor, file_popup, toggle, key_popup]
@@ -16,7 +16,7 @@ when defined(emscripten):
 
 const
   BootRom = ""
-  Rom = readFile("123/games/gb/Super Mario Land 2 - 6 Golden Coins (USA, Europe) (Rev B).gb")
+  Rom = readFile("123/gb/mbc3-fiddle/mbc3-withram.gb")
   #Rom = "123/dmg-acid2.gb"
 
 

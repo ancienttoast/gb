@@ -10,7 +10,7 @@ bin           = @["debugger", "simple"]
 
 
 # Dependencies
-requires "nim >= 1.0.4", "sdl2 >= 2.0", "nimgl >= 1.1.1", "imageman >= 0.6.5", "opengl >= 1.1.0", "bingod >= 0.0.1"
+requires "nim >= 1.4.2", "sdl2 >= 2.0", "nimgl >= 1.1.1", "imageman >= 0.6.5", "opengl >= 1.1.0", "bingo >= 0.0.1"
 requires "nimPNG >= 0.3.1"
 
 
