@@ -131,6 +131,13 @@ func extract*[T: uint8 | uint16 | uint32](value: T, a, b: static[int]): T =
     Mask = (2^bits.len - 1).T
   (value shr bits.a) and Mask
 
+func inc*[T: uint8 | uint16 | uint32](value: var T, limits: static[Slice[T]]): bool =
+  if value >= limits.b:
+    result = true
+    value = limits.a
+  else:
+    value += 1
+
 
 iterator count*[T](slice: Slice[T]): int =
   if slice.a < slice.b:
