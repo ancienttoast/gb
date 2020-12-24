@@ -412,7 +412,7 @@ proc controlsWindow(isOpen: var bool, history: History, gameboy: var Gameboy, is
     if igBeginTabBar("options"):
       if igBeginTabItem("General"):
         if igButton("Reset"):
-          gameboy = newGameboy(Rom, BootRom)
+          gameboy.reset()
           history.clear()
         igSameLine()
         igToggleButton("is_running", isRunning)
@@ -428,7 +428,7 @@ proc controlsWindow(isOpen: var bool, history: History, gameboy: var Gameboy, is
           history.advance(gameboy)
         igPopButtonRepeat()
 
-        igSameLine(igGetWindowWidth() - 100)
+        igSameLine(igGetWindowWidth() - 80)
         igTextDisabled(&"{displayBytes(history.sizeInBytes())}")
 
         igPushItemWidth(-1)
@@ -451,6 +451,7 @@ proc controlsWindow(isOpen: var bool, history: History, gameboy: var Gameboy, is
 
 var
   gameboyDevice = newGameboy(Rom, BootRom)
+  history = newHistory()
 
 proc loadRom(buffer: UncheckedArray[uint8], size: cint) {.exportc.} =
   var
@@ -458,6 +459,7 @@ proc loadRom(buffer: UncheckedArray[uint8], size: cint) {.exportc.} =
   for i in 0..<size:
     data[i] = buffer[i].char
   gameboyDevice = newGameboy(data, BootRom)
+  history.clear()
 
 proc main*() =
   sdl2.init(INIT_VIDEO or INIT_AUDIO)
@@ -494,7 +496,6 @@ proc main*() =
 
   var
     speedBuffer = newSeq[float32](30)
-    history = newHistory()
     isOpen = true
     isRunning = true
     showApu = false
@@ -543,6 +544,7 @@ proc main*() =
           d = cast[DropEventPtr](addr event)
         if d.kind == DropFile:
           gameboyDevice = newGameboy(readFile($d.file), BootRom)
+          history.clear()
           isRunning = true
           freeClipboardText(d.file)
       else:
@@ -682,6 +684,7 @@ proc main*() =
       path: string
     if filePopup.render(path):
       gameboyDevice = newGameboy(Rom, BootRom)
+      history.clear()
       isRunning = true
 
     showDemoWindow(showDemo)

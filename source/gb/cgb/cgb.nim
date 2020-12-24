@@ -36,7 +36,7 @@ Additions
     0xff55  HDMA5 - New DMA Length/Mode/Start
 
     Needs new MemSlot
-  
+
   0xff56  RP - Infrared Communications Port [CGB Only]
 
   CGB Palette Memory
@@ -108,7 +108,7 @@ type
     testMemory*: seq[uint8]
     cycles*: uint64
 
-proc reset*(self: Cgb, rom = "") =
+proc reset*(self: Cgb, rom: string) =
   self.testMemory = newSeq[uint8](uint16.high.int + 1)
 
   self.mcu.clearHandlers()
@@ -127,6 +127,9 @@ proc reset*(self: Cgb, rom = "") =
     staticBoot(self.cpu, self.mcu)
   
   self.cycles = 0
+
+proc reset*(self: Cgb) =
+  self.reset(self.cart.data)
 
 proc step*(self: Cgb): bool =
   let

@@ -28,7 +28,7 @@ type
     testMemory*: seq[uint8]
     cycles*: uint64
 
-proc reset*(self: Dmg, rom = "") =
+proc reset*(self: Dmg, rom: string) =
   self.testMemory = newSeq[uint8](uint16.high.int + 1)
 
   self.mcu.clearHandlers()
@@ -47,6 +47,9 @@ proc reset*(self: Dmg, rom = "") =
     staticBoot(self.cpu, self.mcu)
   
   self.cycles = 0
+
+proc reset*(self: Dmg) =
+  self.reset(self.cart.data)
 
 proc step*(self: Dmg): bool =
   let

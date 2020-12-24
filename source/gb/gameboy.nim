@@ -124,6 +124,17 @@ proc step*(self: Gameboy): bool =
   else:
     discard
 
+proc reset*(self: Gameboy) =
+  assert self.kind in {gkDMG, gkCGB}
+  case self.kind
+  of gkDMG:
+    self.dmg.reset()
+  of gkCGB:
+    self.cgb.reset()
+  else:
+    discard
+
+
 proc stepFrame*(self: Gameboy) =
   ## Advance the device by a signle frame.
   var
