@@ -243,6 +243,8 @@ proc initMbc1(mcu: Mcu, cart: Cartridge) =
 
 ########################################################################################]#
 proc mbc3RomHandler(cart: Cartridge): MemHandler =
+  alias(mbc3, cart.state.mbc3)
+
   MemHandler(
     read: proc(address: MemAddress): uint8 =
       case address
@@ -251,7 +253,7 @@ proc mbc3RomHandler(cart: Cartridge): MemHandler =
       of 0x4000'u16..0x7fff'u16:
         let
           p = address - 0x4000
-        cart.data[(cart.state.mbc3.romBank.int * RomBankSize) + p.int].uint8
+        cart.data[(mbc3.romBank.int * RomBankSize) + p.int].uint8
       else:
         0'u8
     ,
@@ -262,13 +264,13 @@ proc mbc3RomHandler(cart: Cartridge): MemHandler =
         ##   Mostly the same as for MBC1, a value of 0x0a will enable reading and writing to
         ##   external RAM - and to the RTC Registers! A value of 0x00 will disable either.
         if cart.header.ramSize != crsNone:
-          cart.state.mbc3.ramEnable = value == 0x0a
+          mbc3.ramEnable = value == 0x0a
       of 0x2000'u16..0x3fff'u16:
         ## ROM Bank Number  [W]
         ##   Same as for MBC1, except that the whole 7 bits of the RAM Bank Number are written
         ##   directly to this address. As for the MBC1, writing a value of 00h, will select
         ##   Bank 0x01 instead. All other values 0x01-0x7f select the corresponding ROM Banks.
-        cart.state.mbc3.romBank = max(value and 0b01111111, 1)
+        mbc3.romBank = max(value and 0b01111111, 1)
       of 0x4000'u16..0x5fff'u16:
         ## RAM Bank Number - or - RTC Register Select  [W]
         ##   As for the MBC1s RAM Banking Mode, writing a value in range for 00h-03h maps the
@@ -277,46 +279,47 @@ proc mbc3RomHandler(cart: Cartridge): MemHandler =
         ##   0xa000-0xbfff. That register could then be read/written by accessing any address in
         ##   that area, typically that is done by using address 0xa000.
         if value in 0'u8..3'u8:
-          cart.state.mbc3.ramBank = value
-          cart.state.mbc3.rtcMode = rdInvalid
+          mbc3.ramBank = value
+          mbc3.rtcMode = rdInvalid
         elif value in 0x08'u8..0x0c'u8:
-          cart.state.mbc3.rtcMode = (value - 0x08).Mbc3RtcData
+          mbc3.rtcMode = (value - 0x08).Mbc3RtcData
       of 0x6000'u16..0x7fff'u16:
         ## Latch Clock Data  [W]
         ##   When writing 0x00, and then 0x01 to this register, the current time becomes latched into the
         ##   RTC registers. The latched data will not change until it becomes latched again, by repeating
         ##   the write 0x00->0x01 procedure.
-        if value == 1 and cart.state.mbc3.rtcPrepareLatch:
-          cart.state.mbc3.rtcLatch = cart.state.mbc3.rtcClock
-        cart.state.mbc3.rtcPrepareLatch = value == 0
+        if value == 1 and mbc3.rtcPrepareLatch:
+          mbc3.rtcLatch = mbc3.rtcClock
+        mbc3.rtcPrepareLatch = value == 0
       else:
         discard
   )
 
 proc mbc3RamHandler(cart: Cartridge): MemHandler =
+  alias(mbc3, cart.state.mbc3)
   if cart.header.ramSize != crsNone:
     MemHandler(
       read: proc(address: MemAddress): uint8 =
-        if not cart.state.mbc3.ramEnable:
+        if not mbc3.ramEnable:
           return 0
-        if cart.state.mbc3.rtcMode != rdInvalid:
-          return cast[array[5, uint8]](cart.state.mbc3.rtcLatch)[cart.state.mbc3.rtcMode.ord()]
+        if mbc3.rtcMode != rdInvalid:
+          return cast[array[5, uint8]](mbc3.rtcLatch)[mbc3.rtcMode.ord()]
         let
-          p = address.toRamDataOffset(cart.state.mbc3.ramBank)
-        if p.int > cart.state.mbc3.ram.high:
+          p = address.toRamDataOffset(mbc3.ramBank)
+        if p.int > mbc3.ram.high:
           0'u8
         else:
-          cart.state.mbc3.ram[p]
+          mbc3.ram[p]
       ,
       write: proc(address: MemAddress, value: uint8) =
-        if not cart.state.mbc3.ramEnable:
+        if not mbc3.ramEnable:
           return
-        if cart.state.mbc3.rtcMode != rdInvalid:
-          cast[ptr array[5, uint8]](addr cart.state.mbc3.rtcClock)[cart.state.mbc3.rtcMode.ord()] = value
+        if mbc3.rtcMode != rdInvalid:
+          cast[ptr array[5, uint8]](addr mbc3.rtcClock)[mbc3.rtcMode.ord()] = value
         let
-          p = address.toRamDataOffset(cart.state.mbc3.ramBank)
-        if p.int <= cart.state.mbc3.ram.high:
-          cart.state.mbc3.ram[p] = value
+          p = address.toRamDataOffset(mbc3.ramBank)
+        if p.int <= mbc3.ram.high:
+          mbc3.ram[p] = value
     )
   else:
     NullHandler

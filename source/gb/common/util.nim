@@ -173,3 +173,8 @@ func ashr*[T: int32](x: T, n: uint): T =
 
 func `ashr`*[T: uint32](x: T, n: uint): T =
   cast[uint32](ashr(cast[int32](x), n))
+
+
+
+template alias*(newName: untyped, call: untyped) =
+  template newName(): untyped = call
