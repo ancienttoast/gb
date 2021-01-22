@@ -1309,6 +1309,12 @@ const
   ]
 
 
+func dissasemble*(mem: var Mcu, pc: var uint16): string =
+  let
+    opcode = mem.readNext(pc)
+    instruction = OpcodeTable[opcode.int]
+  instruction.diss(opcode, mem, pc)
+
 func step*(self: var Sm83, mem: var Mcu): int {.discardable.} =
   if self.state.`if` != {}:
     self.state.status -= { sfHalted }
