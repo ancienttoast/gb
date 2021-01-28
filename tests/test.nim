@@ -12,4 +12,4 @@ import
   gb/gba/test_cpu as gba_cpu,
   gb/gba/test_mem as gba_mem,
 
-  rom/[blargg/test_blargg, dmg_acid2/test_dmg_acid2]
+  rom/[blargg/test_blargg, dmg_acid2/test_dmg_acid2, mooneye-gb/test_mooneye]
