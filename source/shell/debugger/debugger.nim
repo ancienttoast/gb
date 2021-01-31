@@ -1,10 +1,11 @@
 import
   std/[strformat, times, monotimes, options, streams],
-  opengl, nimgl/imgui, sdl2, sdl2/audio, impl_sdl, impl_opengl,
+  opengl, nimgl/imgui, sdl2,
   imageman, bingo,
   style, gb/[gameboy, rewind], gb/dmg/[cpu, mem, ppu, apu], shell/render
 import
-  widget/[mem_editor, file_popup, toggle, key_popup]
+  impl_sdl, impl_opengl,
+  widget/[mem_editor, file_popup, toggle, key_popup, misc]
 
 when defined(profiler):
   import nimprof
@@ -16,50 +17,12 @@ when defined(emscripten):
 
 const
   BootRom = ""
-  Rom = readFile("123/gb/mbc3-fiddle/mbc3-withram.gb")
-  #Rom = "123/dmg-acid2.gb"
-
-
-#proc storeToBin*(s: Stream, o: DateTime) =
-#  storeToBin(s, o.format("yyyy-MM-dd'T'HH:mm:sszzz"))
-#
-#proc initFromBin*(dst: var DateTime, s: Stream) =
-#  var
-#    tmp: string
-#  initFromBin(tmp, s)
-#  dst = parse(tmp, "yyyy-MM-dd'T'HH:mm:sszzz")
+  #Rom = readFile("123/gb/mbc3-fiddle/mbc3-withram.gb")
+  Rom = readFile("123/games/gb/Super Mario Land 2 - 6 Golden Coins (USA, Europe) (Rev B).gb")
 
 
 
-type
-  Texture = tuple[texture: GLuint, width, height: int]
-
-proc upload(self: var Texture, image: Image[ColorRGBU]) =
-  glBindTexture(GL_TEXTURE_2D, self.texture)
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB.GLint, image.width.GLsizei, image.height.GLsizei, 0, GL_RGB, GL_UNSIGNED_BYTE, unsafeAddr image.data[0])
-
-  self.width = image.width
-  self.height = image.height
-
-proc initTexture(): Texture =
-  glGenTextures(1, addr result.texture)
-  glBindTexture(GL_TEXTURE_2D, result.texture)
-
-  glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST.GLint)
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST.GLint)
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
-
-proc destroy(self: Texture) =
-  glDeleteTextures(1, unsafeAddr self.texture)
-
-proc igTexture(self: Texture, scale: float) =
-  igImage(cast[pointer](self.texture), ImVec2(x: self.width.float32 * scale, y: self.height.float32 * scale))
-
-
-
-proc igColorEdit3(label: cstring, col: var ColorRGBU, flags: ImGuiColorEditFlags = 0.ImGuiColorEditFlags): bool {.discardable.} =
+proc igColorEdit3*(label: cstring, col: var ColorRGBU, flags: ImGuiColorEditFlags = 0.ImGuiColorEditFlags): bool {.discardable.} =
   var
     floatColor: array[3, float32]
   floatColor[0] = col[0].int / 255
@@ -73,30 +36,6 @@ proc igColorEdit3(label: cstring, col: var ColorRGBU, flags: ImGuiColorEditFlags
 
 
 
-template rawDataTooltip(body: untyped): untyped =
-  igTextDisabled("(raw)")
-  if igIsItemHovered():
-    igBeginTooltip()
-    igPushTextWrapPos(igGetFontSize() * 35.0)
-    body
-    igPopTextWrapPos()
-    igEndTooltip()
-
-
-func displayBytes(bytes: int): string =
-  const
-    Divider = 1000
-    Units = [ "B", "kB", "MB", "GB", "TB" ]
-  var
-    current = bytes.float
-  for unit in Units:
-    if current <= Divider:
-      result = &"{current:6.2f}{unit}"
-      break
-    current = current / Divider
-
-
-
 proc showDemoWindow(isOpen: var bool) =
   if not isOpen:
     return
@@ -104,8 +43,7 @@ proc showDemoWindow(isOpen: var bool) =
 
 
 proc cpuDebuggerWindow(isOpen: var bool, gameboy: Gameboy) =
-  assert gameboy.kind == gkDMG
-  if not isOpen:
+  if not isOpen or gameboy.kind != gkDMG:
     return
   let
     state = gameboy.dmg.cpu.state
@@ -166,8 +104,7 @@ type
     oamTextures: array[40, Texture]
 
 proc ppuDebuggerWindow(isOpen: var bool, self: var PpuWindow, gameboy: Gameboy) =
-  assert gameboy.kind == gkDMG
-  if not isOpen:
+  if not isOpen or gameboy.kind != gkDMG:
     return
   let
     ppu = gameboy.dmg.ppu
@@ -295,8 +232,7 @@ proc initPpuWindow(): PpuWindow =
 
 
 func apuDebuggerWindow(isOpen: var bool, gameboy: Gameboy) =
-  assert gameboy.kind == gkDMG
-  if not isOpen:
+  if not isOpen or gameboy.kind == gkDMG:
     return
   igSetNextWindowPos(ImVec2(x: 748, y: 50), FirstUseEver)
   igSetNextWindowSize(ImVec2(x: 527, y: 364), FirstUseEver)
@@ -402,55 +338,76 @@ func apuDebuggerWindow(isOpen: var bool, gameboy: Gameboy) =
 
   igEnd()
 
-proc controlsWindow(isOpen: var bool, history: History, gameboy: var Gameboy, isRunning: var bool, speedBuffer: var seq[float32]) =
+proc controlsWindow(isOpen: var bool, frameskip: var int, history: History, gameboy: var Gameboy, isRunning: var bool, speedBuffer: var seq[float32]) =
   assert gameboy.kind == gkDMG
   if not isOpen:
     return
   igSetNextWindowPos(ImVec2(x: 5, y: 392), FirstUseEver)
   igSetNextWindowSize(ImVec2(x: 237, y: 100), FirstUseEver)
   if igBegin("Controls", addr isOpen) and not igIsWindowCollapsed():
-    if igBeginTabBar("options"):
-      if igBeginTabItem("General"):
-        if igButton("Reset"):
-          gameboy.reset()
-          history.clear()
-        igSameLine()
-        igToggleButton("is_running", isRunning)
-        igPushButtonRepeat(true)
-        igSameLine()
-        if igButtonArrow("##step", ImGuiDir.Right):
-          isRunning = false
-          discard gameboy.step()
-        igSameLine()
-        if igButtonArrow("##step_frame", ImGuiDir.Right):
-          isRunning = false
-          gameboy.stepFrame()
-          history.advance(gameboy)
-        igPopButtonRepeat()
+    if igButton("Reset"):
+      gameboy.reset()
+      history.clear()
+    igSameLine()
+    igToggleButton("is_running", isRunning)
+    igPushButtonRepeat(true)
+    igSameLine()
+    if igButtonArrow("##step", ImGuiDir.Right):
+      isRunning = false
+      discard gameboy.step()
+    igSameLine()
+    if igButtonArrow("##step_frame", ImGuiDir.Right):
+      isRunning = false
+      gameboy.stepFrame()
+      history.advance(gameboy)
+    igPopButtonRepeat()
 
-        igSameLine(igGetWindowWidth() - 80)
-        igTextDisabled(&"{displayBytes(history.sizeInBytes())}")
+    igSameLine(igGetWindowWidth() - 80)
+    igTextDisabled(&"{displayBytes(history.sizeInBytes())}")
 
-        igPushItemWidth(-1)
-        var
-          i = history.index.int32
-        if igSliderInt("##history", addr i, 0, history.high.int32, "%d"):
-          history.restore(gameboy, i.int)
-        igPushItemWidth(0)
-        igEndTabItem()
+    igPushItemWidth(-1)
+    var
+      i = history.index.int32
+    if igSliderInt("##history", addr i, 0, history.high.int32, "%d"):
+      isRunning = false
+      history.restore(gameboy, i.int)
+    igPushItemWidth(0)
 
-      if igBeginTabItem("Speed"):
-        igPlotLines("Speed", addr speedBuffer[0], speedBuffer.len.int32,
-          overlay_text = &"{speedBuffer[speedBuffer.high]:6.2f}%",
-          scale_min = 0, scale_max = 1000,
-          graph_size = ImVec2(x: 0, y: 40))
-        igEndTabItem()
-    igEndTabBar()
+    igDummy(ImVec2(x: 0.0, y: igGetFrameHeightWithSpacing() / 2))
+
+    igPlotLines("Speed", addr speedBuffer[0], speedBuffer.len.int32,
+      overlay_text = &"{speedBuffer[speedBuffer.high]:6.2f}%",
+      scale_min = 0, scale_max = 1000,
+      graph_size = ImVec2(x: 0, y: 40))
+    
+    if igBeginCombo("Frameskip", if frameskip == 0: "Unlimited" else: $(frameskip - 1)):
+      for c in 0..10:
+        let
+          isSelected = c == frameskip
+        if igSelectable(if c == 0: "Unlimited" else: $(c - 1), isSelected):
+          frameskip = c
+        if isSelected:
+          igSetItemDefaultFocus()
+      igEndCombo()
+
+  igEnd()
+
+proc mainWindow(mainTexture: var Texture, painter: DmgPainter, device: Gameboy) =
+  igSetNextWindowPos(ImVec2(x: 247, y: 25), FirstUseEver)
+  igSetNextWindowSize(ImVec2(x: 496, y: 467), FirstUseEver)
+  if igBegin("Main"):
+    let
+      image = painter.renderLcd(device.dmg.ppu)
+    mainTexture.upload(image)
+    var
+      size: ImVec2
+    igGetContentRegionAvailNonUDT(addr size)
+    igImage(cast[pointer](mainTexture.texture), size)
   igEnd()
 
 
 var
-  gameboyDevice = newGameboy(Rom, BootRom)
+  device = newGameboy(Rom, BootRom)
   history = newHistory()
 
 proc loadRom(buffer: UncheckedArray[uint8], size: cint) {.exportc.} =
@@ -458,7 +415,7 @@ proc loadRom(buffer: UncheckedArray[uint8], size: cint) {.exportc.} =
     data = newString(size)
   for i in 0..<size:
     data[i] = buffer[i].char
-  gameboyDevice = newGameboy(data, BootRom)
+  device = newGameboy(data, BootRom)
   history.clear()
 
 proc main*() =
@@ -473,17 +430,6 @@ proc main*() =
   if glSetSwapInterval(-1) == -1:
     # If adaptive vsync isn't supported try normal vsync
     discard glSetSwapInterval(1)
-
-  var
-    spec: AudioSpec
-  spec.freq = 44100
-  # TODO: will endiannes break this?
-  spec.format = AUDIO_F32LSB
-  spec.channels = 2
-  spec.samples = 1024
-
-  discard openAudio(addr spec, nil)
-  pauseAudio(0)
 
   when not defined(emscripten):
     loadExtensions()
@@ -511,7 +457,7 @@ proc main*() =
     filePopup = initFilePopup("Open file")
     states: array[10, Option[string]]
     painter = initPainter(PaletteDefault)
-    frameskip = 0
+    frameskip = 1
     inputMap: array[InputKey, sdl2.Scancode] = [
       SDL_SCANCODE_RIGHT,
       SDL_SCANCODE_LEFT,
@@ -538,12 +484,12 @@ proc main*() =
           m = cast[KeyboardEventPtr](addr event)
         for input, scancode in inputMap:
           if m.keysym.scancode == scancode:
-            gameboyDevice.input(input, m.state == KeyPressed.uint8)
+            device.input(input, m.state == KeyPressed.uint8)
       of DropFile:
         let
           d = cast[DropEventPtr](addr event)
         if d.kind == DropFile:
-          gameboyDevice = newGameboy(readFile($d.file), BootRom)
+          device = newGameboy(readFile($d.file), BootRom)
           history.clear()
           isRunning = true
           freeClipboardText(d.file)
@@ -554,13 +500,13 @@ proc main*() =
       frameCount = 0
     if isRunning:
       try:
-        frameCount = gameboyDevice.frame(frameskip)
+        frameCount = device.frame(frameskip)
       except:
         echo getCurrentException().msg
         echo getStackTrace(getCurrentException())
-        echo "cpu\t", gameboyDevice.dmg.cpu.state
+        echo "cpu\t", device.dmg.cpu.state
         isRunning = false
-      history.advance(gameboyDevice)
+      history.advance(device)
     
     let
       dt = (getMonoTime() - start).inNanoseconds.int
@@ -597,7 +543,7 @@ proc main*() =
               label = $i & (if state.isSome: " - " else: "")# & $state.get.time else: " -")
             if igMenuItem(label):
               let
-                save = gameboyDevice.save()
+                save = device.save()
                 s = newStringStream()
               s.storeBin(save)
               s.setPosition(0)
@@ -610,7 +556,7 @@ proc main*() =
             if igMenuItem(label):
               let
                 s = newStringStream(state.get)
-              gameboyDevice.load(s.binTo(GameboyState))
+              device.load(s.binTo(GameboyState))
           igEndMenu()
         igEndMenu()
       igEndMainMenuBar()
@@ -623,17 +569,6 @@ proc main*() =
       igOpenPopup("Options")
     if igBeginPopupModal("Options", addr showOptions):
       if igBeginTabBar("options"):
-        if igBeginTabItem("General"):
-          if igBeginCombo("Frameskip", if frameskip == 0: "Unlimited" else: $(frameskip - 1)):
-            for c in 0..10:
-              let
-                isSelected = c == frameskip
-              if igSelectable(if c == 0: "Unlimited" else: $(c - 1), isSelected):
-                frameskip = c
-              if isSelected:
-                igSetItemDefaultFocus()
-            igEndCombo()
-          igEndTabItem()
         if igBeginTabItem("Rendering"):
           igText("DMG Palette color")
           igColorEdit3("White", painter.palette[gsWhite])
@@ -662,28 +597,17 @@ proc main*() =
         igEndTabBar()
       igEndPopup()
 
-    apuDebuggerWindow(showApu, gameboyDevice)
-    ppuDebuggerWindow(showPpu, ppuWindow, gameboyDevice)
-    memDebuggerWindow(showMem, editor, gameboyDevice)
-    cpuDebuggerWindow(showCpu, gameboyDevice)
-    controlsWindow(showControls, history, gameboyDevice, isRunning, speedBuffer)
-    
-    igSetNextWindowPos(ImVec2(x: 247, y: 25), FirstUseEver)
-    igSetNextWindowSize(ImVec2(x: 496, y: 467), FirstUseEver)
-    if igBegin("Main"):
-      let
-        image = painter.renderLcd(gameboyDevice.dmg.ppu)
-      mainTexture.upload(image)
-      var
-        size: ImVec2
-      igGetContentRegionAvailNonUDT(addr size)
-      igImage(cast[pointer](mainTexture.texture), size)
-    igEnd()
+    apuDebuggerWindow(showApu, device)
+    ppuDebuggerWindow(showPpu, ppuWindow, device)
+    memDebuggerWindow(showMem, editor, device)
+    cpuDebuggerWindow(showCpu, device)
+    controlsWindow(showControls, frameskip, history, device, isRunning, speedBuffer)
+    mainWindow(mainTexture, painter, device)
     
     var
       path: string
     if filePopup.render(path):
-      gameboyDevice = newGameboy(Rom, BootRom)
+      device = newGameboy(Rom, BootRom)
       history.clear()
       isRunning = true
 
@@ -706,7 +630,6 @@ proc main*() =
 
   destroy mainTexture
   destroy ppuWindow
-  closeAudio()
   igOpenGL3Shutdown()
   igSdl2Shutdown()
   glDeleteContext(glContext)

@@ -54,17 +54,6 @@ proc renderBackground*(self: DmgPainter, ppu: Ppu, drawView = true): Image[Color
     for x, c, palette, priority in mapLine(ppu.state, 0, y, w, ppu.state.io.bgMapAddress().int - VramStartAddress):
       result[x, y] = self.palette[palette.shade(c)]
 
-  #[
-  if drawView:
-    let
-      a = [ ppu.state.io.scx.int, ppu.state.io.scy.int ]
-      b = [ ppu.state.io.scx.int + 160, ppu.state.io.scy.int + 144 ]
-    result.drawLine(a, [a.x, b.y], [255'u8, 0, 0].ColorRGBU)
-    result.drawLine(a, [b.x, a.y], [255'u8, 0, 0].ColorRGBU)
-    result.drawLine([a.x, b.y], b, [255'u8, 0, 0].ColorRGBU)
-    result.drawLine([b.x, a.y], b, [255'u8, 0, 0].ColorRGBU)
-  ]#
-
 proc renderSprites*(self: DmgPainter, ppu: Ppu): Image[ColorRGBU] =
   result = initImage[ColorRGBU](Width, Height)
   for y in 0..<Height:
