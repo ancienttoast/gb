@@ -56,6 +56,7 @@ type
     rHL = (3, "HL")
 
   Sm83StatusFlag* = enum
+    sfStopped
     sfHalted
     sfInterruptWait
     sfInterruptEnable
@@ -1263,7 +1264,7 @@ op opNOP, 1:
   print: "NOP"
 
 op opSTOP, 1:
-  # TODO
+  execute: cpu.status += { sfStopped }
   print: "STOP"
 
 op opHALT, 1:
@@ -1317,7 +1318,7 @@ func dissasemble*(mem: var Mcu, pc: var uint16): string =
 
 func step*(self: var Sm83, mem: var Mcu): int {.discardable.} =
   if self.state.`if` != {}:
-    self.state.status -= { sfHalted }
+    self.state.status -= { sfHalted, sfStopped }
     if self.state.ime == 1:
       for interrupt in Interrupt:
         if interrupt in self.state.ie and interrupt in self.state.`if`:
@@ -1326,7 +1327,7 @@ func step*(self: var Sm83, mem: var Mcu): int {.discardable.} =
           opCall(self.state, mem, InterruptHandler[interrupt])
           return 5
 
-  if sfHalted in self.state.status:
+  if sfHalted in self.state.status or  sfStopped in self.state.status:
     return 1
 
   let
