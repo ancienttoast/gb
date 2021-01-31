@@ -78,8 +78,69 @@ Additions
 
 ]##
 import
+  gb/common/util,
   boot,
   gb/dmg/[mem, cpu, apu, timer, ppu, mbc, joypad]
+
+
+
+const
+  WorkRamBankSize = 4096
+
+type
+  WorkRamBank = array[WorkRamBankSize, uint8]
+
+  WorkRamState = tuple
+    svbk: uint8                       ## 0xff70  SVBK - WRAM Bank [CGB Only]
+                                      ##   In CGB Mode WRAM is 32Kbytes in 8 4Kbyte banks. Bank 0 is always available in memory at 0xc000..0xcfff,
+                                      ##   bank 1..7 can be accessed at 0xd000..0xdfff based on the value in this register.
+                                      ##
+                                      ##   bit 0-2 - Select WRAM Bank (R/W)
+                                      ##             Writing a value between 0x00..0x07 will select bank 1..7, writing 0x00 will also select bank 1.
+    data: array[7, WorkRamBank]
+
+  WorkRam = ref object
+    state: WorkRamState
+
+func bank(self: WorkRamState): int =
+  self.svbk.extract(0, 2).int
+
+proc setupMemHandler(mcu: Mcu, work: WorkRam) =
+  let
+    bank0 =
+      MemHandler(
+        read: proc(address: MemAddress): uint8 =
+          work.state.data[0][address.int - MemSlotSize[msWorkRam0].a.int]
+        ,
+        write: proc(address: MemAddress, value: uint8) =
+          work.state.data[0][address.int - MemSlotSize[msWorkRam0].a.int] = value
+      )
+    bankN =
+      MemHandler(
+        read: proc(address: MemAddress): uint8 =
+          work.state.data[work.state.bank][address.int - MemSlotSize[msWorkRamN].a.int]
+        ,
+        write: proc(address: MemAddress, value: uint8) =
+          work.state.data[work.state.bank][address.int - MemSlotSize[msWorkRamN].a.int] = value
+      )
+    control =
+      MemHandler(
+        read: proc(address: MemAddress): uint8 =
+          if address == 0xff70:
+            work.state.svbk
+          else:
+            0
+        ,
+        write: proc(address: MemAddress, value: uint8) =
+          if address == 0xff70:
+            work.state.svbk = value and 0b00000111
+      )
+  mcu.setHandler(msWorkRam0, bank0)
+  mcu.setHandler(msWorkRamN, bankN)
+  mcu.setHandler(msCgbControl, control)
+
+proc newWorkRam(): WorkRam =
+  WorkRam()
 
 
 
@@ -91,6 +152,7 @@ type
     ppu: PpuState
     apu: ApuState
     joypad: JoypadState
+    work: WorkRamState
     cart: MbcState
 
 
@@ -101,6 +163,7 @@ type
     ppu*: Ppu
     apu*: Apu
     joypad*: Joypad
+    work*: WorkRam
     cart*: Cartridge
 
     boot: BootRom
@@ -118,6 +181,7 @@ proc reset*(self: Cgb, rom: string) =
   self.mcu.setupMemHandler(self.ppu)
   self.mcu.setupMemHandler(self.apu)
   self.mcu.setupMemHandler(self.joypad)
+  self.mcu.setupMemHandler(self.work)
   
   self.mcu.setupMemHandler(self.boot)
   if rom != "":
@@ -148,6 +212,7 @@ proc save*(self: Cgb): CgbState =
   result.ppu = self.ppu.state
   result.apu = self.apu.state
   result.joypad = self.joypad.state
+  result.work = self.work.state
   result.cart = self.cart.state
 
 proc load*(self: Cgb, state: CgbState) =
@@ -157,6 +222,7 @@ proc load*(self: Cgb, state: CgbState) =
   self.ppu.state = state.ppu
   self.apu.state = state.apu
   self.joypad.state = state.joypad
+  self.work.state = state.work
   self.cart.state = state.cart
 
 
@@ -170,6 +236,7 @@ proc newCgb*(bootRom = ""): Cgb =
     ppu: newPpu(mcu),
     apu: newApu(mcu),
     joypad: newJoypad(mcu),
+    work: newWorkRam(),
     boot: newBootRom(bootRom),
     cycles: 0
   )

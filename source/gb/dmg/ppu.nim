@@ -138,8 +138,7 @@ type
                       ##   Color number _PpuGrayShades_ translation sprite palette.
                       ##   Works exactly as _bgp_, except color number 0 is transparent.
     wy, wx:   uint8   ## 0xff4a
-    unk0:     array[4, uint8]
-                      ## 0xff4c
+    unk0:     uint8   ## 0xff4c
 
   PpuSpriteAttribute {.bycopy.} = tuple
     y, x:  uint8      ## Specifies the sprite position (x - 8, y - 16)
