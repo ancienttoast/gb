@@ -98,6 +98,7 @@ proc memDebuggerWindow(isOpen: var bool, editor: var MemoryEditor, gameboy: Game
 
 type
   PpuWindow = object
+    selectedOam: int
     bgTexture: Texture
     tileMapTextures: array[3, Texture]
     spriteTexture: Texture
@@ -145,34 +146,12 @@ proc ppuDebuggerWindow(isOpen: var bool, self: var PpuWindow, gameboy: Gameboy) 
           igTexture(self.tileMapTextures[i], 2)
         igEndTabItem()
       if igBeginTabItem("OAM"):
-        var
-          selected = 0
         let
           oams = ppu.state.oam
-        for i, oam in oams:
-          if igBeginChild("oam" & $i, ImVec2(x: igGetWindowContentRegionWidth() / 9, y: 80), true, ImGuiWindowFlags.NoScrollbar):
-            if igIsWindowHovered():
-              selected = i
-            let
-              tile = painter.bgTile(ppu, oam.tile.int)
-            self.oamTextures[i].upload(tile)
-            igTexture(self.oamTextures[i], 2)
-            igSameLine()
-            igBeginGroup()
-            igText(&"{oam.y:#04x}")
-            igText(&"{oam.x:#04x}")
-            igText(&"{oam.tile:#04x}")
-            igText(&"{oam.flags:#04x}")
-            igEndGroup()
-          igEndChild()
-
-          if (i + 1) mod 8 != 0:
-            igSameLine()
-        
-        if igBeginChild("highlight", ImVec2(x: 0, y: 0), true, ImGuiWindowFlags.NoScrollbar):
+        if igBeginChild("##oam_highlight", ImVec2(x: 0, y: 90), true, ImGuiWindowFlags.NoScrollbar):
           let
-            oam = oams[selected]
-          igTexture(self.oamTextures[selected], 9)
+            oam = oams[self.selectedOam]
+          igTexture(self.oamTextures[self.selectedOam], 9)
 
           igSameLine()
 
@@ -209,6 +188,40 @@ proc ppuDebuggerWindow(isOpen: var bool, self: var PpuWindow, gameboy: Gameboy) 
             igText(&"{oam.priority}")
           igEndGroup()
         igEndChild()
+
+        if igBeginChild("##oam_main", ImVec2(x: 0, y: 0), true):
+          const
+            ColumnSize = 55
+          let
+            columns = max(1, (igGetWindowContentRegionWidth() / ColumnSize).int - 1)
+          igColumns(columns.int32, "##oam", false)
+          for i, oam in oams:
+            let
+              tile = painter.bgTile(ppu, oam.tile.int)
+            self.oamTextures[i].upload(tile)
+
+            var
+              cursor: ImVec2
+            igGetCursorPosNonUDT(addr cursor)
+            if igSelectable("##oam_" & $i, self.selectedOam == i, size = ImVec2(x: ColumnSize, y: 68)):
+              self.selectedOam = i
+            igSetCursorPos(cursor)
+
+            igBeginGroup()
+            igSpacing()
+            igTexture(self.oamTextures[i], 2)
+            igSameLine()
+            igBeginGroup()
+            igText(&"{oam.y:#04x}")
+            igText(&"{oam.x:#04x}")
+            igText(&"{oam.tile:#04x}")
+            igText(&"{oam.flags:#04x}")
+            igEndGroup()
+            igSpacing()
+            igEndGroup()
+
+            igNextColumn()
+          igEndChild()
         
         igEndTabItem()
       igEndTabBar()
@@ -526,6 +539,9 @@ proc main*() =
         igSeparator()
         if igMenuItem("Options"):
           showOptions = true
+        igSeparator()
+        if igMenuItem("Quit"):
+          isOpen = false
         igEndMenu()
       if igBeginMenu("Window"):
         igCheckbox("Controls", addr showControls)
