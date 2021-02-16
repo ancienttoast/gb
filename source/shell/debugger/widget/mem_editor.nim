@@ -91,18 +91,15 @@ proc draw*(isOpen: var bool, self: var MemoryEditor, title: string, data_provide
       line_height = igGetTextLineHeight()
       line_total_count = ((mem_size + self.rows-1) / self.rows).int32
       clipper = newImGuiListClipper(line_total_count, line_height)
-    clipper.begin(line_total_count, line_height)
     clipper.step()
-    var
-      visible_start_addr = clipper.displayStart * self.rows
-      visible_end_addr = clipper.displayEnd * self.rows
-    
-    var
-      data_next = false
+
     if not self.allowEdits or self.dataEditingAddr >= mem_size:
       self.dataEditingAddr = -1
-    
-    var data_editing_addr_backup = self.dataEditingAddr
+
+    let
+      visible_start_addr = clipper.displayStart * self.rows
+      visible_end_addr = clipper.displayEnd * self.rows
+      data_editing_addr_backup = self.dataEditingAddr
     if self.dataEditingAddr != -1:
       if igIsKeyPressed(igGetKeyIndex(ImGuiKey.UpArrow)) and self.dataEditingAddr >= self.rows:
         self.dataEditingAddr -= self.rows
@@ -117,15 +114,17 @@ proc draw*(isOpen: var bool, self: var MemoryEditor, title: string, data_provide
         self.dataEditingAddr += 1
         self.dataEditingTakeFocus = true
     if (self.dataEditingAddr / self.rows) != (data_editing_addr_backup / self.rows):
-        # Track cursor movements
-        let
-          scroll_offset = ((self.dataEditingAddr / self.rows) - (data_editing_addr_backup / self.rows)) * line_height
-          scroll_desired = (scroll_offset < 0.0 and self.dataEditingAddr < visible_start_addr + self.rows*2) or
-            (scroll_offset > 0.0 and self.dataEditingAddr > visible_end_addr - self.rows*2)
-        if scroll_desired:
-          igSetScrollY(igGetScrollY() + scroll_offset)
+      # Track cursor movements
+      let
+        scroll_offset = ((self.dataEditingAddr / self.rows) - (data_editing_addr_backup / self.rows)) * line_height
+        scroll_desired = (scroll_offset < 0.0 and self.dataEditingAddr < visible_start_addr + self.rows*2) or
+          (scroll_offset > 0.0 and self.dataEditingAddr > visible_end_addr - self.rows*2)
+      if scroll_desired:
+        igSetScrollY(igGetScrollY() + scroll_offset)
 
-    var draw_separator = true
+    var
+      draw_separator = true
+      data_next = false
     for line_i in clipper.displayStart..<clipper.displayEnd:  # display only visible items
       var
         address = line_i * self.rows
