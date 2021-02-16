@@ -17,8 +17,8 @@ when defined(emscripten):
 
 const
   BootRom = ""
-  #Rom = readFile("123/gb/mbc3-fiddle/mbc3-withram.gb")
   Rom = readFile("123/games/gb/Super Mario Land 2 - 6 Golden Coins (USA, Europe) (Rev B).gb")
+  #Rom = readFile("tests/rom/blargg/cpu_instrs/cpu_instrs.gb")
 
 
 
@@ -405,10 +405,15 @@ proc controlsWindow(isOpen: var bool, frameskip: var int, history: History, game
 
   igEnd()
 
-proc mainWindow(mainTexture: var Texture, painter: DmgPainter, device: Gameboy) =
+proc mainWindow(mainTexture: var Texture, painter: DmgPainter, inputMap: array[InputKey, sdl2.Scancode], device: Gameboy) =
   igSetNextWindowPos(ImVec2(x: 247, y: 25), FirstUseEver)
   igSetNextWindowSize(ImVec2(x: 496, y: 467), FirstUseEver)
   if igBegin("Main"):
+    if igIsWindowFocused():
+      let
+        io = igGetIO()
+      for input, scancode in inputMap:
+        device.input(input, io.keysDown[scancode.int])
     let
       image = painter.renderLcd(device.dmg.ppu)
     mainTexture.upload(image)
@@ -492,12 +497,6 @@ proc main*() =
       case event.kind
       of QuitEvent:
         isOpen = false
-      of KeyDown, KeyUp:
-        let
-          m = cast[KeyboardEventPtr](addr event)
-        for input, scancode in inputMap:
-          if m.keysym.scancode == scancode:
-            device.input(input, m.state == KeyPressed.uint8)
       of DropFile:
         let
           d = cast[DropEventPtr](addr event)
@@ -618,7 +617,7 @@ proc main*() =
     memDebuggerWindow(showMem, editor, device)
     cpuDebuggerWindow(showCpu, device)
     controlsWindow(showControls, frameskip, history, device, isRunning, speedBuffer)
-    mainWindow(mainTexture, painter, device)
+    mainWindow(mainTexture, painter, inputMap, device)
     
     var
       path: string
