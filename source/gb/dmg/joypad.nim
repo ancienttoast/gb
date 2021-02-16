@@ -11,7 +11,7 @@ Sources
 ]##
 import
   std/bitops,
-  mem
+  mem, interrupt
 
 
 
@@ -36,6 +36,7 @@ type
   
   Joypad* = ref object
     state*: JoypadState
+    mcu: Mcu
 
 
 func calcState(state: JoypadState): uint8 =
@@ -69,10 +70,14 @@ proc setupMemHandler*(mcu: Mcu, joypad: Joypad) =
   )
 
 proc newJoypad*(mcu: Mcu): Joypad =
-  result = Joypad()
+  result = Joypad(
+    mcu: mcu
+  )
   mcu.setupMemHandler(result)
 
 proc setKeyState*(self: Joypad, key: JoypadKey, state: bool) =
+  if state:
+    self.mcu.raiseInterrupt(iJoypad)
   self.state.keys[key] = state
 
 template `[]=`*(self: Joypad, key: JoypadKey, state: bool) =

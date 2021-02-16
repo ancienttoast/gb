@@ -7,7 +7,7 @@ import
 template joyTest(name: untyped, body: untyped) =
   test name:
     var
-      mem {.inject.} = newSeq[uint8](8)
+      mem {.inject.} = newSeq[uint8](uint16.high - 1)
       mcu {.inject.} = newMcu(addr mem)
       joy {.inject.} = newJoypad(mcu)
     body
