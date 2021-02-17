@@ -56,6 +56,7 @@ type
     msApu
     msLcdIo
     msCgbSwitch,
+    msCgbVRamBank,
     msBootRomFlag
     msCgbVramDma
     msCgbInfra
@@ -82,7 +83,8 @@ const
     0xff0f'u16..0xff0f'u16,
     0xff10'u16..0xff3f'u16,
     0xff40'u16..0xff4c'u16,
-    0xff4d'u16..0xff4f'u16,
+    0xff4d'u16..0xff4d'u16,
+    0xff4e'u16..0xff4f'u16,
     0xff50'u16..0xff50'u16,
     0xff51'u16..0xff55'u16,
     0xff56'u16..0xff56'u16,

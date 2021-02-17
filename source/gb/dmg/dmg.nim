@@ -3,6 +3,13 @@ import
 
 
 
+let
+  FFHandler* = MemHandler(
+    read: proc(address: MemAddress): uint8 = 0xff,
+    write: proc(address: MemAddress, value: uint8) = discard
+  )
+
+
 type
   DmgState* = tuple
     testMemory: seq[uint8]
@@ -46,6 +53,12 @@ proc reset*(self: Dmg, rom: string) =
   if not self.boot.hasRom():
     staticBoot(self.cpu, self.mcu)
   
+  # TODO: bgb does this, but I wasn't able to find any documentation about this
+  self.mcu.setHandler(msCgbSwitch, FFHandler)
+  self.mcu.setHandler(msCgbVRamBank, FFHandler)
+  self.mcu.setHandler(msCgbVramDma, FFHandler)
+  self.mcu.setHandler(msCgbInfra, FFHandler)
+  
   self.cycles = 0
 
 proc reset*(self: Dmg) =
@@ -54,10 +67,13 @@ proc reset*(self: Dmg) =
 proc step*(self: Dmg): bool =
   let
     cycles = self.cpu.step(self.mcu) * 4
-  self.cart.step(cycles)
-  self.timer.step(cycles)
-  self.apu.step(cycles)
-  result = self.ppu.step(cycles)
+  if sfStopped notin self.cpu.state.status:
+    self.cart.step(cycles)
+    self.timer.step(cycles)
+    self.apu.step(cycles)
+    result = self.ppu.step(cycles)
+  else:
+    result = true
   self.cycles += cycles.uint64
 
 

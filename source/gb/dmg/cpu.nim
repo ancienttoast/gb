@@ -1327,7 +1327,7 @@ func step*(self: var Sm83, mem: var Mcu): int {.discardable.} =
           opCall(self.state, mem, InterruptHandler[interrupt])
           return 5
 
-  if sfHalted in self.state.status or  sfStopped in self.state.status:
+  if sfHalted in self.state.status or sfStopped in self.state.status:
     return 1
 
   let
