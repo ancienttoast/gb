@@ -39,6 +39,12 @@ type
     mcu: Mcu
 
 
+const
+  JoypadModeKeys: array[JoypadRegisterMode, set[JoypadKey]] = [
+    { kRight, kLeft, kUp, kDown },
+    { kA, kB, kSelect, kStart }
+  ]
+
 func calcState(state: JoypadState): uint8 =
   ## bit 7 - Not used
   ## bit 6 - Not used
@@ -75,8 +81,8 @@ proc newJoypad*(mcu: Mcu): Joypad =
   )
   mcu.setupMemHandler(result)
 
-proc setKeyState*(self: Joypad, key: JoypadKey, state: bool) =
-  if state:
+func setKeyState*(self: Joypad, key: JoypadKey, state: bool) =
+  if state and key in JoypadModeKeys[self.state.mode]:
     self.mcu.raiseInterrupt(iJoypad)
   self.state.keys[key] = state
 
