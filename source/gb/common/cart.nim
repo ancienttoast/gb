@@ -94,7 +94,7 @@ const
   RomBankSize* = 16_384
   RamBankSize* = 8_192
   # TODO: use CartridgeRomSize somehow
-  #RomSize: array[0..11, int] = [ 32_768, 65_536, 131_072, 262_144, 524_288, 1_048_576, 2_097_152, 4_194_304, 8_388_608, 1_179_648, 1_310_720, 1_572_864 ]
+  RomSize: array[0..11, int] = [ 32_768, 65_536, 131_072, 262_144, 524_288, 1_048_576, 2_097_152, 4_194_304, 8_388_608, 1_179_648, 1_310_720, 1_572_864 ]
   RamSize*: array[CartridgeRamSize, int] = [ 0, 2_048, 8_192, 32_768, 131_072, 65_536 ]
 
 
@@ -110,5 +110,27 @@ proc readCartHeader*(data: string): CartHeader =
 func isCgbOnly*(self: CartHeader): bool =
   self.cgb == 0xc0
 
+func romLen*(self: CartHeader): int =
+  if self.romSize.ord >= 0x52:
+    RomSize[self.romSize.ord - 0x50 + 7]
+  else:
+    RomSize[self.romSize.ord]
+
+func romBanks*(self: CartHeader): int =
+  self.romLen div RomBankSize
+
+func ramLen*(self: CartHeader): int =
+  RamSize[self.ramSize]
+
+func ramBanks*(self: CartHeader): int =
+  if RamSize[self.ramSize] != 0:
+    RamSize[self.ramSize] div RamBankSize
+  else:
+    0
+
 func `$`*(self: CartHeader): string =
   $self.title & "v" & $self.version
+
+func `$`*(self: CartridgeType): string =
+  result = system.`$`(self)
+  result = result[2..result.high]

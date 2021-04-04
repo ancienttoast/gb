@@ -222,7 +222,7 @@ proc initMbc1(mcu: Mcu, cart: Cartridge) =
   if cart.header.ramSize != crsNone:
     cart.state.mbc1.ramBank = 0
     cart.state.mbc1.ramEnable = false
-    cart.state.mbc1.ram = newSeq[uint8](RamSize[cart.header.ramSize])
+    cart.state.mbc1.ram = newSeq[uint8](cart.header.ramLen)
 
   mcu.setHandler(msRom, cart.mbc1RomHandler())
   mcu.setHandler(msRam, cart.mbc1RamHandler())
