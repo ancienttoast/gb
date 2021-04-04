@@ -2,7 +2,7 @@ import
   std/[strformat, times, monotimes, options, streams],
   opengl, nimgl/imgui, sdl2,
   imageman, bingo,
-  style, gb/[gameboy, rewind], gb/dmg/[cpu, mem, ppu, apu], shell/render
+  style, gb/[gameboy, rewind], gb/common/cart, gb/dmg/[cpu, mem, ppu, apu], shell/render
 import
   impl_sdl, impl_opengl,
   widget/[mem_editor, file_popup, toggle, key_popup, misc]
@@ -18,7 +18,7 @@ when defined(emscripten):
 const
   BootRom = ""
   Rom = readFile("123/games/gb/Super Mario Land 2 - 6 Golden Coins (USA, Europe) (Rev B).gb")
-  #Rom = readFile("tests/rom/blargg/cpu_instrs/cpu_instrs.gb")
+  #Rom = readFile("F:/code/nim/gb/123/tests/gb-test-roms-master/cpu_instrs/source/test.gb")
 
 
 
@@ -42,11 +42,9 @@ proc showDemoWindow(isOpen: var bool) =
   igShowDemoWindow(addr isOpen)
 
 
-proc cpuDebuggerWindow(isOpen: var bool, gameboy: Gameboy) =
-  if not isOpen or gameboy.kind != gkDMG:
+proc cpuDebuggerWindow(isOpen: var bool, state: CpuState) =
+  if not isOpen:
     return
-  let
-    state = gameboy.dmg.cpu.state
   igSetNextWindowPos(ImVec2(x: 5, y: 497), FirstUseEver)
   igSetNextWindowSize(ImVec2(x: 181, y: 218), FirstUseEver)
   if igBegin("CPU", addr isOpen) and not igIsWindowCollapsed():
@@ -87,10 +85,10 @@ proc cpuDebuggerWindow(isOpen: var bool, gameboy: Gameboy) =
   igEnd()
 
 
-proc memDebuggerWindow(isOpen: var bool, editor: var MemoryEditor, gameboy: Gameboy) =
+proc memDebuggerWindow(isOpen: var bool, editor: var MemoryEditor, mem: Mcu) =
   let
-    provider = proc(address: int): uint8 = gameboy.dmg.mcu[address.uint16]
-    setter = proc(address: int, value: uint8) = gameboy.dmg.mcu[address.uint16] = value
+    provider = proc(address: int): uint8 = mem[address.uint16]
+    setter = proc(address: int, value: uint8) = mem[address.uint16] = value
   igSetNextWindowPos(ImVec2(x: 191, y: 497), FirstUseEver)
   igSetNextWindowSize(ImVec2(x: 552, y: 218), FirstUseEver)
   draw(isOpen, editor, "Memory editor", provider, setter, 0x10000)
@@ -104,11 +102,10 @@ type
     spriteTexture: Texture
     oamTextures: array[40, Texture]
 
-proc ppuDebuggerWindow(isOpen: var bool, self: var PpuWindow, gameboy: Gameboy) =
-  if not isOpen or gameboy.kind != gkDMG:
+proc ppuDebuggerWindow(isOpen: var bool, self: var PpuWindow, ppu: Ppu) =
+  if not isOpen:
     return
   let
-    ppu = gameboy.dmg.ppu
     painter = initPainter(PaletteDefault)
   igSetNextWindowPos(ImVec2(x: 748, y: 25), FirstUseEver)
   igSetNextWindowSize(ImVec2(x: 527, y: 690), FirstUseEver)
@@ -244,16 +241,13 @@ proc initPpuWindow(): PpuWindow =
     texture = initTexture()
 
 
-func apuDebuggerWindow(isOpen: var bool, gameboy: Gameboy) =
-  if not isOpen or gameboy.kind == gkDMG:
+func apuDebuggerWindow(isOpen: var bool, state: ApuState) =
+  if not isOpen:
     return
   igSetNextWindowPos(ImVec2(x: 748, y: 50), FirstUseEver)
   igSetNextWindowSize(ImVec2(x: 527, y: 364), FirstUseEver)
   igSetNextWindowCollapsed(true, FirstUseEver)
   if igBegin("APU", addr isOpen) and not igIsWindowCollapsed():
-    let
-      state = gameboy.dmg.apu.state
-
     if igCollapsingHeader("General"):
       rawDataTooltip:
         igText("channelCtrl    ")
@@ -352,11 +346,10 @@ func apuDebuggerWindow(isOpen: var bool, gameboy: Gameboy) =
   igEnd()
 
 proc controlsWindow(isOpen: var bool, frameskip: var int, history: History, gameboy: var Gameboy, isRunning: var bool, speedBuffer: var seq[float32]) =
-  assert gameboy.kind == gkDMG
   if not isOpen:
     return
-  igSetNextWindowPos(ImVec2(x: 5, y: 392), FirstUseEver)
-  igSetNextWindowSize(ImVec2(x: 237, y: 100), FirstUseEver)
+  igSetNextWindowPos(ImVec2(x: 5, y: 25), FirstUseEver)
+  igSetNextWindowSize(ImVec2(x: 237, y: 175), FirstUseEver)
   if igBegin("Controls", addr isOpen) and not igIsWindowCollapsed():
     if igButton("Reset"):
       gameboy.reset()
@@ -402,10 +395,93 @@ proc controlsWindow(isOpen: var bool, frameskip: var int, history: History, game
         if isSelected:
           igSetItemDefaultFocus()
       igEndCombo()
+  igEnd()
+
+func cartInfoWindow(isOpen: var bool, header: CartHeader) =
+  if not isOpen:
+    return
+  igSetNextWindowPos(ImVec2(x: 5, y: 205), FirstUseEver)
+  igSetNextWindowSize(ImVec2(x: 237, y: 287), FirstUseEver)
+  if igBegin("Info", addr isOpen) and not igIsWindowCollapsed():
+    rawDataTooltip:
+      igText("entryPoint      ")
+      igSameLine()
+      igTextDisabled(&"{header.entryPoint:#06x}")
+      igText("logo            ")
+      igSameLine()
+      igTextDisabled("...")
+
+      igText("title           ")
+      igSameLine()
+      igTextDisabled("%.*s", header.title.len.cint, header.title)
+      igText("manufacturer    ")
+      igSameLine()
+      igTextDisabled("%.*s", header.manufacturer.len.cint, header.manufacturer)
+
+      igText("cgb             ")
+      igSameLine()
+      igTextDisabled(&"{header.cgb:#02x}")
+
+      igText("newLicensee     ")
+      igSameLine()
+      igTextDisabled("%.*s", header.newLicensee.len.cint, header.newLicensee)
+
+      igText("sgb             ")
+      igSameLine()
+      igTextDisabled(&"{header.sgb:#02x}")
+
+      igText("kind            ")
+      igSameLine()
+      igTextDisabled($header.kind)
+      igText("romSize         ")
+      igSameLine()
+      igTextDisabled($header.romSize)
+      igText("ramSize         ")
+      igSameLine()
+      igTextDisabled($header.ramSize)
+
+      igText("destination     ")
+      igSameLine()
+      igTextDisabled(&"{header.destination:#02x}")
+      igText("oldLicensee     ")
+      igSameLine()
+      igTextDisabled(&"{header.oldLicensee:#02x}")
+
+      igText("version         ")
+      igSameLine()
+      igTextDisabled($header.version)
+
+      igText("headerChecksum  ")
+      igSameLine()
+      igTextDisabled(&"{header.headerChecksum:#02x}")
+      igText("globalChecksum  ")
+      igSameLine()
+      igTextDisabled(&"{header.globalChecksum:#04x}")
+
+    igText("%.*s", header.title.len.cint, header.title)
+    igSameLine()
+    igText(" - %.*s", header.manufacturer.len.cint, header.manufacturer)
+
+    igText($header.kind)
+
+    igText("ROM")
+    igSameLine()
+    igTextDisabled("%s (%d)", displayBytes(header.romLen), header.romBanks)
+
+    igText("RAM")
+    igSameLine()
+    let
+      ramLen = header.ramLen
+    if ramLen != 0:
+      igTextDisabled("%s (%d)", displayBytes(ramLen), header.ramBanks)
+    else:
+      igTextDisabled("None")
 
   igEnd()
 
 proc mainWindow(mainTexture: var Texture, painter: DmgPainter, inputMap: array[InputKey, sdl2.Scancode], device: Gameboy) =
+  if device.kind != gkDMG:
+    return
   igSetNextWindowPos(ImVec2(x: 247, y: 25), FirstUseEver)
   igSetNextWindowSize(ImVec2(x: 496, y: 467), FirstUseEver)
   if igBegin("Main"):
@@ -465,6 +541,7 @@ proc main*() =
     showApu = false
     showPpu = true
     showControls = true
+    showInfo = true
     showCpu = true
     showMem = true
     showDemo = false
@@ -544,6 +621,7 @@ proc main*() =
         igEndMenu()
       if igBeginMenu("Window"):
         igCheckbox("Controls", addr showControls)
+        igCheckbox("Info", addr showInfo)
         igCheckbox("PPU", addr showPpu)
         igCheckbox("APU", addr showApu)
         igCheckbox("CPU", addr showCpu)
@@ -612,12 +690,25 @@ proc main*() =
         igEndTabBar()
       igEndPopup()
 
-    apuDebuggerWindow(showApu, device)
-    ppuDebuggerWindow(showPpu, ppuWindow, device)
-    memDebuggerWindow(showMem, editor, device)
-    cpuDebuggerWindow(showCpu, device)
-    controlsWindow(showControls, frameskip, history, device, isRunning, speedBuffer)
-    mainWindow(mainTexture, painter, inputMap, device)
+    case device.kind
+    of gkDMG:
+      apuDebuggerWindow(showApu, device.dmg.apu.state)
+      ppuDebuggerWindow(showPpu, ppuWindow, device.dmg.ppu)
+      memDebuggerWindow(showMem, editor, device.dmg.mcu)
+      cpuDebuggerWindow(showCpu, device.dmg.cpu.state)
+      controlsWindow(showControls, frameskip, history, device, isRunning, speedBuffer)
+      cartInfoWindow(showInfo, device.dmg.cart.header)
+      mainWindow(mainTexture, painter, inputMap, device)
+    of gkCGB:
+      apuDebuggerWindow(showApu, device.cgb.apu.state)
+      ppuDebuggerWindow(showPpu, ppuWindow, device.cgb.ppu)
+      memDebuggerWindow(showMem, editor, device.cgb.mcu)
+      cpuDebuggerWindow(showCpu, device.cgb.cpu.state)
+      controlsWindow(showControls, frameskip, history, device, isRunning, speedBuffer)
+      cartInfoWindow(showInfo, device.cgb.cart.header)
+      #mainWindow(mainTexture, painter, inputMap, device)
+    else:
+      discard
     
     var
       path: string
