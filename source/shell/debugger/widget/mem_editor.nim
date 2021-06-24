@@ -90,7 +90,8 @@ proc draw*(isOpen: var bool, self: var MemoryEditor, title: string, data_provide
     var
       line_height = igGetTextLineHeight()
       line_total_count = ((mem_size + self.rows-1) / self.rows).int32
-      clipper = newImGuiListClipper(line_total_count, line_height)
+      clipper = newImGuiListClipper()
+    clipper.begin(line_total_count, line_height)
     clipper.step()
 
     if not self.allowEdits or self.dataEditingAddr >= mem_size:
@@ -159,7 +160,7 @@ proc draw*(isOpen: var bool, self: var MemoryEditor, title: string, data_provide
               ImGuiInputTextFlags.EnterReturnsTrue.int32 or
               ImGuiInputTextFlags.AutoSelectAll.int32 or
               ImGuiInputTextFlags.NoHorizontalScroll.int32 or
-              ImGuiInputTextFlags.AlwaysInsertMode.int32 or
+              ImGuiInputTextFlags.AlwaysOverwrite.int32 or
               ImGuiInputTextFlags.CallbackAlways.int32)
           if igInputText("##data", self.dataInput, 32, flags, get_cursor_pos, addr cursor_pos):
             data_write = true

@@ -62,7 +62,7 @@ func igButtonArrow*(label: cstring, dir: ImGuiDir): bool =
   var
     flags = 0.ImGuiButtonFlags
   if (window.dc.itemFlags and ImGuiItemFlags.ButtonRepeat) == ImGuiItemFlags.ButtonRepeat:
-    flags = ImGuiButtonFlagsPrivate.Repeat.ImGuiButtonFlags
+    flags = cast[ImGuiButtonFlags](ImGuiButtonFlagsPrivate.Repeat)
 
   let
     bb = ImRect(min: pos, max: pos + size)

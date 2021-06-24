@@ -41,6 +41,17 @@ proc get_files_in_path(path: string): seq[Item] =
     for kind, path in walkDir(path, relative = false):
       result &= (path: path, name: path.lastPathPart(), size: getFileSize(path).int, isDir: path.dirExists())
 
+proc igBeginListBox(label: cstring, items_count: cint, height_in_items: cint): bool =
+  # If height_in_items == -1, default height is maximum 7.
+  let
+    g = igGetCurrentContext()
+    height_in_items_f = (if height_in_items < 0: min(items_count, 7).float else: height_in_items.float) + 0.25
+    size = ImVec2(
+      x: 0,
+      y: igGetTextLineHeightWithSpacing() * height_in_items_f + igGetStyle().framePadding.y * 2.0
+    )
+  return igBeginListBox(label, size)
+
 proc render*(self: var FilePopup, outPath: var string): bool =
   result = false
 
@@ -58,7 +69,7 @@ proc render*(self: var FilePopup, outPath: var string): bool =
     var
       isChanged = false
     igPushItemWidth(-1)
-    if igListBoxHeader("##", self.filesInScope.len.int32, 10):
+    if igBeginListBox("##", self.filesInScope.len.int32, 10):
       for i, path in self.filesInScope:
         igPushID(path.name)
         if igSelectable("##", i == self.selection):
@@ -73,7 +84,7 @@ proc render*(self: var FilePopup, outPath: var string): bool =
         else:
           igText(path.size.printSize())
         igPopID()
-      igListBoxFooter()
+      igEndListBox()
     igPopItemWidth()
     
     if isChanged and self.currentPath.isDir:
