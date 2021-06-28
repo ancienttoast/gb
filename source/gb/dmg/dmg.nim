@@ -66,15 +66,16 @@ proc reset*(self: Dmg) =
 
 proc step*(self: Dmg): bool =
   let
-    cycles = self.cpu.step(self.mcu) * 4
+    cycleDelta = self.cpu.step(self.mcu) * 4
+  self.cycles += cycleDelta.uint64
+
   if sfStopped notin self.cpu.state.status:
-    self.cart.step(cycles)
-    self.timer.step(cycles)
-    self.apu.step(cycles)
-    result = self.ppu.step(cycles)
+    self.cart.step(cycleDelta)
+    self.timer.step(cycleDelta)
+    self.apu.step(cycleDelta, self.cycles)
+    result = self.ppu.step(cycleDelta)
   else:
     result = true
-  self.cycles += cycles.uint64
 
 
 proc save*(self: Dmg): DmgState =

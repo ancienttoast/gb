@@ -197,12 +197,12 @@ proc reset*(self: Cgb) =
 
 proc step*(self: Cgb): bool =
   let
-    cycles = self.cpu.step(self.mcu) * 4
-  self.cart.step(cycles)
-  self.timer.step(cycles)
-  self.apu.step(cycles)
-  result = self.ppu.step(cycles)
-  self.cycles += cycles.uint64
+    cyclesDelta = self.cpu.step(self.mcu) * 4
+  self.cycles += cyclesDelta.uint64
+  self.cart.step(cyclesDelta)
+  self.timer.step(cyclesDelta)
+  self.apu.step(cyclesDelta, self.cycles)
+  result = self.ppu.step(cyclesDelta)
 
 
 proc save*(self: Cgb): CgbState =

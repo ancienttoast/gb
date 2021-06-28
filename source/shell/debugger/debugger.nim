@@ -1,6 +1,6 @@
 import
   std/[strformat, times, monotimes, options, streams],
-  opengl, nimgl/imgui, sdl2,
+  opengl, nimgl/imgui, sdl2, sdl2/audio,
   imageman, bingo,
   style, gb/[gameboy, rewind], gb/common/cart, gb/dmg/[cpu, mem, ppu, apu], shell/render
 import
@@ -16,9 +16,12 @@ when defined(emscripten):
 
 
 const
+  #BootRom = readFile("123/[BIOS] Nintendo Game Boy Boot ROM (World).gb")
   BootRom = ""
-  Rom = readFile("123/games/gb/Super Mario Land 2 - 6 Golden Coins (USA, Europe) (Rev B).gb")
-  #Rom = readFile("F:/code/nim/gb/123/tests/gb-test-roms-master/cpu_instrs/source/test.gb")
+  Rom = readFile("123/games/gb/Kirby's Dream Land (USA, Europe).gb")
+  #Rom = readFile("123/games/gb/Pokemon - Blue Version (USA, Europe) (SGB Enhanced).gb")
+  #Rom = readFile("123/games/gb/Legend of Zelda, The - Link's Awakening (USA, Europe) (Rev B).gb")
+  #Rom = readFile("123/proto/sound/test.gb")
 
 
 
@@ -535,6 +538,26 @@ proc main*() =
   styleVGui()
 
   var
+    audioSpec: audio.AudioSpec
+  audioSpec.freq = 48000
+  audioSpec.format = AUDIO_S8
+  audioSpec.channels = 2
+  audioSpec.samples = 1024
+
+  #[ Open the audio device ]#
+  let
+    audioDevice = openAudioDevice(nil, 0, addr audioSpec, nil, 0)
+  echo audioDevice
+  if audioDevice == 0:
+    echo "Couldn't open audio: " & $sdl2.getError()
+    quit(-1)
+
+  #discard audioDevice.queueAudio(addr audio.wav_buffer[0], audio.audio_len.uint32)
+
+  #[ Start playing ]#
+  audioDevice.pauseAudioDevice(0)
+
+  var
     speedBuffer = newSeq[float32](30)
     isOpen = true
     isRunning = true
@@ -740,5 +763,6 @@ proc main*() =
   igSdl2Shutdown()
   glDeleteContext(glContext)
 
+  closeAudio()
   destroy window
   sdl2.quit()
