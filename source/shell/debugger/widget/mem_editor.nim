@@ -15,6 +15,11 @@ import
   std/[strscans, strformat, streams],
   nimgl/imgui
 
+
+# TODO: fix this upstream
+proc newImGuiListClipper(): ptr ImGuiListClipper {.importc: "ImGuiListClipper_ImGuiListClipper".}
+
+
 type
   DataProviderProc = proc(adress: int): uint8
   DataSetterProc = proc(adress: int, value: uint8)
